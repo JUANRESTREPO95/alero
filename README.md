@@ -65,6 +65,13 @@ Get-FileHash .\Alero-Setup-0.2.1.exe -Algorithm SHA256
 
 Debe coincidir con el contenido de `Alero-Setup-0.2.1.exe.sha256`.
 
+### Portable
+
+Si prefieres no instalar nada, en el mismo release está
+[Alero-0.2.1-portable.zip](https://github.com/JUANRESTREPO95/alero/releases/download/v0.2.1/Alero-0.2.1-portable.zip):
+se descomprime en cualquier carpeta y se ejecuta `Alero.exe`. No crea accesos ni
+toca el registro; los ajustes siguen guardándose en `%APPDATA%\Alero`.
+
 ### Desde el código
 
 Requiere **Node.js LTS** (probado con 26.x) y Windows 10/11.
