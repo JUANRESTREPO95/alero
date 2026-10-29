@@ -25,7 +25,7 @@ imitación: puedes correr Claude Code, PowerShell, cmd, `ssh` o lo que quieras.
 | `Ctrl+Alt+Espacio` | Mostrar / plegar |
 | `Ctrl+Alt+T` | Nueva pestaña (abre el menú) |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Cambiar de pestaña |
-| `Ctrl+Shift+W` | Cerrar la pestaña actual (mata su sesión) |
+| `Ctrl+Shift+W` | Cerrar la pestaña actual (pide confirmación si la sesión sigue viva) |
 | `Esc` | Plegar |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copiar / pegar en la terminal |
 
@@ -44,6 +44,11 @@ pantalla y **se mantiene la anterior**: nunca te quedas sin atajo.
 Plegada es solo la marca; al abrirla, la barra se estira y el panel baja con
 una animación corta (unos 330 ms). Las terminales siguen corriendo mientras
 está plegada.
+
+## Tamaño del panel
+
+El alto se cambia arrastrando el borde inferior (el ancho queda fijo) y se
+recuerda entre arranques. La asa en el borde es solo una pista visual.
 
 ## Perfiles
 

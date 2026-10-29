@@ -254,7 +254,57 @@ function activate(id) {
   if (expanded && !isSettingsOpen()) tab.term.focus();
 }
 
+let pendingClose = null;
+
+function clearPrompt() {
+  pendingClose = null;
+  clearAlertUi();
+}
+
+function showPrompt(title, body, confirmText, onConfirm) {
+  currentAlert = { prompt: true };
+  el.alertTitle.textContent = title;
+  el.alertBody.textContent = body;
+  el.alertAvatar.textContent = '';
+  el.alertActions.textContent = '';
+
+  const cancel = document.createElement('button');
+  cancel.textContent = 'Cancelar';
+  cancel.addEventListener('click', clearPrompt);
+
+  const confirm = document.createElement('button');
+  confirm.className = 'primary';
+  confirm.textContent = confirmText;
+  confirm.addEventListener('click', () => {
+    clearAlertUi();
+    onConfirm();
+  });
+
+  el.alertActions.append(cancel, confirm);
+  el.alert.classList.remove('hidden');
+  el.shell.classList.add('alerting');
+}
+
+/** Cierra una pestaña; si su sesión sigue viva, pregunta antes. */
+function requestCloseTab(id) {
+  const tab = tabs.get(id);
+  if (!tab) return;
+  if (tab.dead) {
+    closeTab(id);
+    return;
+  }
+  if (!expanded) window.alero.expand();
+  pendingClose = id;
+  showPrompt(
+    `Cerrar «${tab.title}»`,
+    'Se cerrará su sesión y lo que esté corriendo dentro.',
+    'Cerrar pestaña',
+    () => closeTab(id),
+  );
+}
+
 function closeTab(id) {
+  pendingClose = null;
   const tab = tabs.get(id);
   if (!tab) return;
   window.alero.killTab(id);
@@ -311,7 +361,7 @@ function renderTabs() {
     close.title = 'Cerrar pestaña';
     close.addEventListener('click', (e) => {
       e.stopPropagation();
-      closeTab(id);
+      requestCloseTab(id);
     });
 
     node.append(kind, name, close);
@@ -1120,6 +1170,11 @@ document.addEventListener('keydown', (e) => {
     e.stopPropagation();
   };
 
+  if (pendingClose) {
+    if (e.key === 'Escape') { swallow(); clearPrompt(); return; }
+    if (e.key === 'Enter') { swallow(); const id = pendingClose; clearAlertUi(); closeTab(id); return; }
+  }
+
   if (e.key === 'Escape') {
     swallow();
     if (!el.menu.classList.contains('hidden')) closeMenu();
@@ -1168,7 +1223,7 @@ document.addEventListener('keydown', (e) => {
 
   if (matches(shortcuts.closeTab, e)) {
     swallow();
-    if (activeId) closeTab(activeId);
+    if (activeId) requestCloseTab(activeId);
     return;
   }
 

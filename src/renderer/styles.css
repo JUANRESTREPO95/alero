@@ -900,3 +900,19 @@ html, body {
   height: auto;
   background: transparent;
 }
+
+/* Asa para arrastrar el alto del panel. */
+.grip {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 44px;
+  height: 3px;
+  margin-left: -22px;
+  border-radius: 2px;
+  background: var(--control);
+  opacity: .55;
+  pointer-events: none;
+}
+#shell.collapsed .grip,
+#shell.peek .grip { display: none; }

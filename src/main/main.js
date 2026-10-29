@@ -51,7 +51,7 @@ function createWindow() {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    resizable: false,
+    resizable: true, // el alto se arrastra; el ancho queda fijado abajo
     movable: false,
     minimizable: false,
     maximizable: false,
@@ -70,12 +70,21 @@ function createWindow() {
   });
 
   win.setAlwaysOnTop(true, 'screen-saver');
+
+  // Al soltar el borde inferior, el alto queda guardado.
+  win.on('resized', () => {
+    if (!expanded || peeking) return;
+    const height = win.getBounds().height;
+    if (height >= 260) settings.save({ height });
+  });
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   win.once('ready-to-show', () => {
     win.showInactive();
     win.webContents.send('alero:state', { expanded, animating: false });
+    if (expanded) lockSize(boundsFor(true).width, 260, workArea().height);
+    else lockSize(COLLAPSED.width, COLLAPSED.height, COLLAPSED.height);
     if (expanded && s.focusOnOpen) win.focus();
   });
 }
@@ -108,6 +117,36 @@ function animateTo(target, duration, done) {
 
 let animating = false;
 
+/**
+ * Deja la ventana con un ancho fijo y un alto arrastrable entre minH y maxH.
+ * Con min = max de ancho, Windows solo permite cambiar la altura.
+ */
+function lockSize(width, minH, maxH) {
+  if (!win || win.isDestroyed()) return;
+  const wa = workArea();
+  const w = Math.min(width, wa.width);
+  try {
+    win.setMinimumSize(w, Math.max(40, Math.min(minH, maxH)));
+    win.setMaximumSize(w, Math.max(minH, maxH));
+  } catch {
+    // Alguna plataforma no admite estos límites; se queda con lo que haya.
+  }
+}
+
+/** Suelta los límites para poder animar el tamaño. */
+function unlockSize() {
+  if (!win || win.isDestroyed()) return;
+  const wa = workArea();
+  try {
+    win.setMinimumSize(60, 40);
+    win.setMaximumSize(wa.width, wa.height);
+  } catch {
+    // Sin límites disponibles.
+  }
+}
+
+
+
 function setExpanded(on, { focus = false, then = null } = {}) {
   if (!win || win.isDestroyed()) return;
   if (animating) return;
@@ -124,6 +163,7 @@ function setExpanded(on, { focus = false, then = null } = {}) {
   expanded = Boolean(on);
   settings.save({ expanded });
   animating = true;
+  unlockSize();
 
   if (on) {
     if (focus) win.focus();
@@ -133,6 +173,7 @@ function setExpanded(on, { focus = false, then = null } = {}) {
       // 2) el panel baja
       animateTo(target, 180, () => {
         animating = false;
+        lockSize(target.width, 260, workArea().height);
         // Aviso final: la terminal se reajusta al tamaño definitivo.
         win.webContents.send('alero:state', { expanded: true, animating: false });
         if (focus) win.focus();
@@ -147,6 +188,7 @@ function setExpanded(on, { focus = false, then = null } = {}) {
       win.webContents.send('alero:state', { expanded: false, animating: true });
       animateTo(target, 140, () => {
         animating = false;
+        lockSize(COLLAPSED.width, COLLAPSED.height, COLLAPSED.height);
         win.webContents.send('alero:state', { expanded: false, animating: false });
         if (then) then();
       });
@@ -365,11 +407,13 @@ function dismissAlert() {
   if (!peeking || !win || win.isDestroyed()) return;
 
   peeking = false;
+  unlockSize();
   const target = boundsFor(false);
   win.webContents.send('alero:state', { expanded: true, animating: true });
   animateTo({ ...target, height: COLLAPSED.height }, 150, () => {
     win.webContents.send('alero:state', { expanded: false, animating: true });
     animateTo(target, 140, () => {
+      lockSize(COLLAPSED.width, COLLAPSED.height, COLLAPSED.height);
       win.webContents.send('alero:state', { expanded: false, animating: false });
     });
   });
@@ -385,8 +429,10 @@ function showAlert(alert, decisionId = null) {
 
   if (!expanded && !peeking) {
     peeking = true;
+    unlockSize();
     win.webContents.send('alero:state', { expanded: true, peek: true, animating: true });
     animateTo(spot, 170, () => {
+      lockSize(spot.width, spot.height, spot.height);
       win.webContents.send('alero:state', { expanded: true, peek: true, animating: false });
     });
   } else if (!expanded && peeking) {
