@@ -56,14 +56,14 @@ escritorio y en el menú de inicio.
 El instalador **no está firmado**, así que Windows mostrará el aviso de
 SmartScreen la primera vez: *Más información → Ejecutar de todas formas*.
 
-Para comprobar que la descarga está íntegra, junto al instalador hay un
-`.sha256`. En Windows:
+Para comprobar que la descarga está íntegra, la huella **SHA-256** de cada
+archivo está en la nota del release. En Windows:
 
 ```powershell
 Get-FileHash .\Alero-Setup-0.2.1.exe -Algorithm SHA256
 ```
 
-Debe coincidir con el contenido de `Alero-Setup-0.2.1.exe.sha256`.
+Debe coincidir con la que aparece en el release.
 
 ### Portable
 
