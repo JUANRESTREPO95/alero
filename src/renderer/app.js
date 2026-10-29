@@ -255,6 +255,7 @@ function activate(id) {
 }
 
 let pendingClose = null;
+let dragId = null;
 
 function clearPrompt() {
   pendingClose = null;
@@ -335,8 +336,9 @@ function renderTabs() {
   for (const [id, tab] of tabs) {
     const node = document.createElement('div');
     node.className = 'tab' + (id === activeId ? ' active' : '') + (tab.dead ? ' dead' : '');
-    node.title = tab.title;
+    node.title = `${tab.title} — doble clic para renombrar, arrastra para mover`;
     node.style.setProperty('--tab-color', tab.color);
+    node.draggable = true;
 
     const kind = document.createElement('span');
     kind.className = 'kind';
@@ -366,8 +368,92 @@ function renderTabs() {
 
     node.append(kind, name, close);
     node.addEventListener('click', () => activate(id));
+    node.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      startRename(id);
+    });
+
+    // Arrastrar para reordenar, sin rehacer el DOM (el arrastre no se corta).
+    node.addEventListener('dragstart', (e) => {
+      dragId = id;
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox y Chromium necesitan algún dato para iniciar el arrastre.
+      e.dataTransfer.setData('text/plain', id);
+      node.classList.add('dragging');
+    });
+    node.addEventListener('dragend', () => {
+      dragId = null;
+      node.classList.remove('dragging');
+      for (const other of el.tabs.children) other.classList.remove('drop-before');
+      saveTabs();
+    });
+    node.addEventListener('dragover', (e) => {
+      if (!dragId || dragId === id) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = node.getBoundingClientRect();
+      const after = e.clientX > rect.left + rect.width / 2;
+      moveTab(dragId, id, after);
+    });
+
+    tab.node = node;
     el.tabs.appendChild(node);
   }
+}
+
+/** Coloca la pestaña `from` justo antes (o después) de `target`. */
+function moveTab(from, target, after) {
+  if (from === target) return;
+  const order = [...tabs.keys()].filter((id) => id !== from);
+  const index = order.indexOf(target);
+  order.splice(after ? index + 1 : index, 0, from);
+
+  const next = new Map();
+  for (const id of order) next.set(id, tabs.get(id));
+  tabs.clear();
+  for (const [id, tab] of next) {
+    tabs.set(id, tab);
+    if (tab.node) el.tabs.appendChild(tab.node);
+  }
+}
+
+/** Doble clic en una pestaña: se renombra en el sitio. */
+function startRename(id) {
+  const tab = tabs.get(id);
+  if (!tab?.node) return;
+
+  const name = tab.node.querySelector('.name');
+  if (!name) return;
+
+  const input = document.createElement('input');
+  input.className = 'tab-rename';
+  input.value = tab.title;
+  input.size = Math.max(6, Math.min(22, tab.title.length));
+  name.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    const value = input.value.trim();
+    if (commit && value) tab.title = value.slice(0, 40);
+    renderTabs();
+    saveTabs();
+  };
+
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener('blur', () => finish(true));
 }
 
 function saveTabs() {
@@ -1161,6 +1247,9 @@ function cycle(step) {
 // terminal (si no, las flechas del menú se escribirían en el shell).
 document.addEventListener('keydown', (e) => {
   noteActivity();
+
+  // Renombrando una pestaña: las teclas son del campo, no de la interfaz.
+  if (e.target instanceof HTMLInputElement && e.target.classList.contains('tab-rename')) return;
 
   // Grabando un atajo: las teclas son del grabador, no de la interfaz.
   if (recording) return;

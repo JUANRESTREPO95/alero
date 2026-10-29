@@ -916,3 +916,17 @@ html, body {
 }
 #shell.collapsed .grip,
 #shell.peek .grip { display: none; }
+
+/* Pestaña arrastrándose y campo para renombrarla. */
+.tab.dragging { opacity: .45; }
+.tab-rename {
+  background: var(--rule);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  padding: 1px 4px;
+  min-width: 56px;
+  outline: none;
+}

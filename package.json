@@ -10,7 +10,8 @@
     "start": "electron ."
   },
   "devDependencies": {
-    "electron": "^45.1.0"
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
@@ -19,5 +20,38 @@
   },
   "allowScripts": {
     "node-pty@1.1.0": true
+  },
+  "build": {
+    "appId": "cloud.jpra.alero",
+    "productName": "Alero",
+    "copyright": "Copyright © 2026 Juan Pablo Restrepo Acosta",
+    "asar": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "assets/icon.png",
+      "package.json",
+      "!src/renderer/preview*.html",
+      "!src/renderer/mock-alero.js"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Alero",
+      "artifactName": "Alero-Setup-${version}.exe"
+    },
+    "npmRebuild": false
   }
 }

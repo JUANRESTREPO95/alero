@@ -15,3 +15,4 @@ Thumbs.db
 src/renderer/preview*.html
 src/renderer/mock-alero.js
 .taste-skill/
+dist/
