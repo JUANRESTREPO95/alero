@@ -22,7 +22,20 @@ contextBridge.exposeInMainWorld('alero', {
   dismissAlert: () => ipcRenderer.send('alero:alert:dismiss'),
   hooksPreview: (install) => ipcRenderer.invoke('alero:hooks:preview', install),
   hooksApply: (install, fingerprint) => ipcRenderer.invoke('alero:hooks:apply', install, fingerprint),
-  hooksInstalled: () => ipcRenderer.invoke('alero:hooks:installed'),
+  hooksInstalled: () => ipcRenderer.invoke("alero:hooks:installed"),
+
+  keysStatus: () => ipcRenderer.invoke("alero:keys:status"),
+  setKey: (provider, key) => ipcRenderer.invoke("alero:keys:set", provider, key),
+
+  chatStart: (req) => ipcRenderer.send("alero:chat:start", req),
+  chatStop: (id) => ipcRenderer.send("alero:chat:stop", id),
+  chatHistory: (profileId) => ipcRenderer.invoke("alero:chat:history", profileId),
+  chatSave: (profileId, messages) => ipcRenderer.invoke("alero:chat:save", profileId, messages),
+  chatModels: (provider, baseUrl) => ipcRenderer.invoke("alero:chat:models", provider, baseUrl),
+
+  onChatDelta: (cb) => ipcRenderer.on("alero:chat:delta", (_e, data) => cb(data)),
+  onChatDone: (cb) => ipcRenderer.on("alero:chat:done", (_e, data) => cb(data)),
+  onChatError: (cb) => ipcRenderer.on("alero:chat:error", (_e, data) => cb(data)),
   logoData: (rel) => ipcRenderer.invoke('alero:logo:data', rel),
   readClipboard: () => ipcRenderer.invoke('alero:clipboard:read'),
   writeClipboard: (text) => ipcRenderer.invoke('alero:clipboard:write', text),

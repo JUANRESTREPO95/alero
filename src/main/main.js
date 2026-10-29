@@ -12,6 +12,8 @@ const settings = require('./settings');
 const pty = require('./pty');
 const alerts = require('./alerts');
 const hooks = require('./hooks');
+const keys = require('./keys');
+const chat = require('./chat');
 
 const COLLAPSED = { width: 128, height: 40 };
 
@@ -78,6 +80,13 @@ function createWindow() {
     if (height >= 260) settings.save({ height });
   });
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  // Cualquier enlace (p. ej. uno de la terminal) se abre en el navegador, no en
+  // una ventana de Electron.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: "deny" };
+  });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   win.once('ready-to-show', () => {
@@ -483,6 +492,89 @@ function decide(id, decision) {
   return true;
 }
 
+/** Modelos que ofrece cada proveedor, con la clave ya guardada. */
+const DEFAULT_BASE = {
+  anthropic: "https://api.anthropic.com",
+  openai: "https://api.openai.com",
+  gemini: "https://generativelanguage.googleapis.com",
+  ollama: "http://127.0.0.1:11434",
+};
+
+async function listModels(provider, baseUrl) {
+  const root = String(baseUrl || DEFAULT_BASE[provider] || "").trim().replace(/\/+$/, "");
+  const timeout = AbortSignal.timeout(6000);
+
+  try {
+    if (provider === "ollama") {
+      const res = await fetch(`${root}/api/tags`, { signal: timeout });
+      const data = await res.json();
+      return (data.models || []).map((m) => m.name);
+    }
+
+    const key = keys.get(provider);
+    if (!key) return [];
+
+    if (provider === "anthropic") {
+      const res = await fetch(`${root}/v1/models?limit=100`, {
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+        signal: timeout,
+      });
+      const data = await res.json();
+      return (data.data || []).map((m) => m.id);
+    }
+
+    if (provider === "gemini") {
+      const res = await fetch(`${root}/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`, { signal: timeout });
+      const data = await res.json();
+      return (data.models || [])
+        .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+        .map((m) => String(m.name).replace(/^models\//, ""));
+    }
+
+    const res = await fetch(`${root}/v1/models`, {
+      headers: { authorization: `Bearer ${key}` },
+      signal: timeout,
+    });
+    const data = await res.json();
+    return (data.data || []).map((m) => m.id);
+  } catch {
+    return [];
+  }
+}
+
+// ── Historial de los chats ───────────────────────────────────────────────────
+// Un archivo por perfil en %APPDATA%Alerochats, con tope de mensajes.
+
+const CHAT_LIMIT = 200;
+
+function chatFile(profileId) {
+  const dir = path.join(app.getPath("userData"), "chats");
+  fs.mkdirSync(dir, { recursive: true });
+  const safe = String(profileId || "perfil").replace(/[^a-z0-9_-]/gi, "_");
+  return path.join(dir, `${safe}.json`);
+}
+
+function readChat(profileId) {
+  try {
+    const data = JSON.parse(fs.readFileSync(chatFile(profileId), "utf8"));
+    return Array.isArray(data.messages) ? data.messages : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeChat(profileId, messages) {
+  try {
+    const list = (Array.isArray(messages) ? messages : [])
+      .filter((m) => m && typeof m.content === "string" && (m.role === "user" || m.role === "assistant"))
+      .slice(-CHAT_LIMIT);
+    fs.writeFileSync(chatFile(profileId), JSON.stringify({ messages: list }, null, 2), "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── IPC ──────────────────────────────────────────────────────────────────────
 
 function wireIpc() {
@@ -527,7 +619,42 @@ function wireIpc() {
   ipcMain.handle('alero:hooks:apply', (_e, install, fingerprint) => hooks.apply(Boolean(install), fingerprint));
   ipcMain.handle('alero:hooks:installed', () => hooks.isInstalled());
 
-  ipcMain.handle('alero:logo:pick', () => pickLogo());
+  // ── Chat ────────────────────────────────────────────────────────────────
+  ipcMain.handle("alero:keys:status", () => keys.status());
+  ipcMain.handle("alero:keys:set", (_e, provider, key) => {
+    try {
+      return { ok: true, status: keys.set(provider, key) };
+    } catch (err) {
+      return { ok: false, error: String(err.message || err) };
+    }
+  });
+
+  ipcMain.on("alero:chat:start", async (event, req) => {
+    const id = String(req?.id || "");
+    try {
+      const full = await chat.start({
+        ...req,
+        id,
+        onDelta: (text) => event.sender.send("alero:chat:delta", { id, text }),
+      });
+      event.sender.send("alero:chat:done", { id, text: full });
+    } catch (err) {
+      const aborted = err?.name === "AbortError";
+      event.sender.send("alero:chat:error", {
+        id,
+        aborted,
+        message: aborted ? "Detenido." : String(err?.message || err),
+      });
+    }
+  });
+  ipcMain.on("alero:chat:stop", (_e, id) => chat.stop(String(id)));
+
+  ipcMain.handle("alero:chat:history", (_e, profileId) => readChat(String(profileId)));
+  ipcMain.handle("alero:chat:save", (_e, profileId, messages) => writeChat(String(profileId), messages));
+
+  ipcMain.handle("alero:chat:models", (_e, provider, baseUrl) => listModels(provider, baseUrl));
+
+  ipcMain.handle("alero:logo:pick", () => pickLogo());
   ipcMain.handle('alero:logo:data', (_e, rel) => logoDataUrl(rel));
 
   ipcMain.handle('alero:clipboard:read', () => clipboard.readText());

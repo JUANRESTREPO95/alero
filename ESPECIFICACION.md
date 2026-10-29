@@ -5,7 +5,7 @@
 > o pregunta algo, y deja responder desde la propia barra.
 
 Proyecto personal de Juan. Carpeta: `C:\Users\juanp\Documents\CLAUDE\Alero`.
-Versión: **0.2.1**.
+Versión: **0.3.0**.
 
 ---
 
@@ -26,8 +26,11 @@ Cada pestaña es una **terminal real** (ConPTY), no una imitación.
 
 - Ventana superior sin bordes, siempre encima, centrada; animación en dos fases
   al abrir y cerrar.
-- **Perfiles** (cada entrada del menú `+`): logo, color, nombre, shell
-  (PowerShell o cmd), carpeta de trabajo y comando.
+- **Perfiles** (cada entrada del menú `+`) de dos tipos: **terminal** (logo,
+  color, nombre, shell, carpeta y comando) y **chat** (proveedor, modelo y URL).
+- **Chat** en la pestaña con Anthropic, OpenAI y compatibles, Google Gemini y
+  Ollama; claves cifradas con DPAPI; modelos cargados del proveedor; historial
+  guardado por perfil.
 - Pestañas: crear, cambiar, cerrar (con confirmación si la sesión sigue viva) y
   restaurar al arrancar.
 - **Atajos configurables** con grabación; globales los dos primeros.
@@ -65,6 +68,7 @@ abierta ── aviso ──────► asomada ── Abrir ─────�
 | `Ctrl+Alt+T` | Nueva pestaña (abre el menú) | Global |
 | `Ctrl+Shift+W` | Cerrar la pestaña actual | Con Alero enfocado |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Siguiente / anterior | Con Alero enfocado |
+| `Ctrl+Shift+F` | Buscar en la terminal | Con Alero enfocado |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copiar / pegar | Con Alero enfocado |
 | `Esc` | Cerrar menú, ajustes o plegar | Fijo |
 
@@ -92,10 +96,12 @@ Alero/
 │   ├── alerts.js     pipe local de avisos
 │   ├── hooks.js      instalar/quitar hooks en ~/.claude/settings.json
 │   ├── pty.js        sesiones ConPTY
+│   ├── chat.js       proveedores de chat con streaming
+│   ├── keys.js       claves cifradas (DPAPI)
 │   ├── settings.js   persistencia y migración
 │   └── preload.js    puente contextBridge
 ├── src/hook/alero-hook.js   lo que ejecuta Claude Code
-├── src/renderer/     barra, pestañas, aviso, vistas de ajustes y fuentes
+├── src/renderer/     barra, pestañas, chat, aviso, ajustes, fuentes y xterm
 └── assets/icon.png
 ```
 
@@ -132,8 +138,10 @@ Alero/
 }
 ```
 
-Los logos se copian a `%APPDATA%\Alero\logos\`. El hook lee
-`%APPDATA%\Alero\hook.json` (pipe y token) en cada arranque.
+Los logos se copian a `%APPDATA%\Alero\logos\`; las claves de chat, cifradas,
+a `keys.json`; y cada conversación a `chats\<perfil>.json` (últimos 200
+mensajes). El hook lee `%APPDATA%\Alero\hook.json` (pipe y token) en cada
+arranque.
 
 ## 8. Requisitos
 
@@ -154,7 +162,19 @@ Los logos se copian a `%APPDATA%\Alero\logos\`. El hook lee
    y la decisión llega al hook.
 8. Nada se envía fuera del equipo salvo lo que el usuario configure (Ollama).
 
-## 10. Riesgos conocidos
+## 10. Chat
+
+- Un perfil de tipo chat abre una conversación en su pestaña (sin PTY).
+- Proveedores: Anthropic (`/v1/messages`), OpenAI y compatibles
+  (`/v1/chat/completions`), Google Gemini (`streamGenerateContent`) y Ollama
+  local. Todos con streaming y botón de parar.
+- Las claves viven cifradas en `keys.json` y solo las usa el proceso principal;
+  la interfaz únicamente sabe si existen.
+- Los modelos se piden al proveedor (`/v1/models`, `/v1beta/models`, `/api/tags`)
+  y se ofrecen en un desplegable; la URL se rellena con la del proveedor.
+- El historial se guarda por perfil y se retoma al abrir la pestaña.
+
+## 11. Riesgos conocidos
 
 - **node-pty**: puede requerir compilación nativa en Windows.
 - **Siempre encima**: algunas apps a pantalla completa pueden taparlo.

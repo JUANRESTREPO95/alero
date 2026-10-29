@@ -29,6 +29,7 @@ const DEFAULT_SHORTCUTS = {
   closeTab: 'Control+Shift+W',
   nextTab: 'Control+Tab',
   prevTab: 'Control+Shift+Tab',
+  search: 'Control+Shift+F',
   copy: 'Control+Shift+C',
   paste: 'Control+Shift+V',
 };

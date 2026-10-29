@@ -49,7 +49,7 @@ configures.
 
 Descarga el instalador desde la página de
 [**releases**](https://github.com/JUANRESTREPO95/alero/releases/latest):
-[Alero-Setup-0.2.1.exe](https://github.com/JUANRESTREPO95/alero/releases/download/v0.2.1/Alero-Setup-0.2.1.exe).
+[Alero-Setup-0.3.0.exe](https://github.com/JUANRESTREPO95/alero/releases/download/v0.3.0/Alero-Setup-0.3.0.exe).
 Se instala por usuario, sin permisos de administrador, con accesos en el
 escritorio y en el menú de inicio.
 
@@ -60,7 +60,7 @@ Para comprobar que la descarga está íntegra, la huella **SHA-256** de cada
 archivo está en la nota del release. En Windows:
 
 ```powershell
-Get-FileHash .\Alero-Setup-0.2.1.exe -Algorithm SHA256
+Get-FileHash .\Alero-Setup-0.3.0.exe -Algorithm SHA256
 ```
 
 Debe coincidir con la que aparece en el release.
@@ -68,7 +68,7 @@ Debe coincidir con la que aparece en el release.
 ### Portable
 
 Si prefieres no instalar nada, en el mismo release está
-[Alero-0.2.1-portable.zip](https://github.com/JUANRESTREPO95/alero/releases/download/v0.2.1/Alero-0.2.1-portable.zip):
+[Alero-0.3.0-portable.zip](https://github.com/JUANRESTREPO95/alero/releases/download/v0.3.0/Alero-0.3.0-portable.zip):
 se descomprime en cualquier carpeta y se ejecuta `Alero.exe`. No crea accesos ni
 toca el registro; los ajustes siguen guardándose en `%APPDATA%\Alero`.
 
@@ -104,6 +104,7 @@ Electron) y `asar: false` (el hook de los avisos debe existir como archivo real)
 | `Ctrl+Alt+T` | Nueva pestaña: abre el menú `+` |
 | `Ctrl+Shift+W` | Cerrar la pestaña actual (pide confirmación si la sesión sigue viva) |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Siguiente / anterior pestaña |
+| `Ctrl+Shift+F` | Buscar en la terminal (configurable) |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copiar / pegar en la terminal |
 | `Esc` | Cerrar menú o ajustes, plegar |
 
@@ -126,6 +127,7 @@ Cada entrada del menú `+` es un perfil. Se edita en **⚙ → Perfiles**:
 
 | Campo | Qué hace |
 |---|---|
+| Tipo | `Terminal` (abre una shell) o `Chat` (abre una conversación) |
 | Logo | Imagen propia (PNG, JPG, WEBP, SVG o ICO) que se muestra en la barra y en la pestaña |
 | Color | Punto de la pestaña y del menú |
 | Nombre | Lo que se ve en la pestaña y en el menú |
@@ -147,6 +149,24 @@ Windows y puede leer y escribir donde tú puedas. Solo cambia la carpeta por
 defecto y el «workspace» que pide confiar la primera vez.
 
 «Restaurar por defecto» vuelve a Claude Code / PowerShell / cmd.
+
+## Chat
+
+Un perfil de tipo **Chat** abre una conversación en su pestaña, no una shell.
+
+- **Proveedores**: Anthropic, OpenAI (y compatibles como DeepSeek, OpenRouter o
+  LM Studio), Google Gemini y Ollama local.
+- **Claves**: en **⚙ → Chat**, una por proveedor, cifradas con Windows (DPAPI) en
+  `%APPDATA%Alerokeys.json`. Ollama no necesita clave.
+- **Modelos**: se cargan del proveedor al abrir el perfil y se eligen en un
+  desplegable; si no hay clave o el servidor no responde, se pueden escribir.
+- **URL**: se rellena sola con la del proveedor y sigue siendo editable.
+- **En la pestaña**: streaming, Enter envía, Shift+Enter salta de línea, botones
+  Parar y Nueva, y un selector de modelo que se guarda en el perfil.
+- **Historial**: por perfil en `%APPDATA%Alerochats<perfil>.json` (últimos 200
+  mensajes); se retoma al volver a abrir.
+- Si a un perfil le falta la clave, su tarjeta avisa con un botón a **Ajustes →
+  Chat**.
 
 ## Avisos de Claude Code
 
@@ -211,7 +231,7 @@ assets/        iconos
 
 ## Estado
 
-Versión **0.2.1** (octubre 2026). Funcionando a diario: pestañas reales,
+Versión **0.3.0** (octubre 2026). Funcionando a diario: pestañas reales,
 perfiles con logo, atajos configurables, avisos con Allow/Deny, plegado
 automático e instalador.
 

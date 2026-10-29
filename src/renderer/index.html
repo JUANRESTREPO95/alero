@@ -52,6 +52,13 @@
     </section>
 
     <main id="terminals">
+      <div id="termSearch" class="term-search hidden">
+        <input id="termSearchInput" type="text" placeholder="Buscar…" autocomplete="off" />
+        <button id="termSearchPrev" type="button" title="Anterior">↑</button>
+        <button id="termSearchNext" type="button" title="Siguiente">↓</button>
+        <button id="termSearchClose" type="button" title="Cerrar">×</button>
+      </div>
+
       <div id="terminalsEmpty" class="pane-empty hidden">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6.5h14M3.5 6.5 8 11.5l4.5-5" /></svg>
         <span class="pane-empty-name" aria-hidden="true">Alero</span>
@@ -62,7 +69,7 @@
     <section id="settings" class="settings hidden" aria-label="Ajustes">
       <aside class="settings-side">
         <div class="settings-side-head">
-          <h2 id="settingsTitle">Perfiles de terminal</h2>
+          <h2 id="settingsTitle">Perfiles</h2>
           <button id="closeSettings" class="icon" title="Cerrar ajustes" aria-label="Cerrar ajustes">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
           </button>
@@ -83,6 +90,7 @@
           <button id="tabShortcuts" class="settings-tab" role="tab">Atajos</button>
           <button id="tabAlerts" class="settings-tab" role="tab">Avisos</button>
           <button id="tabBar" class="settings-tab" role="tab">Barra</button>
+          <button id="tabChat" class="settings-tab" role="tab">Chat</button>
         </nav>
 
         <div id="profilesPane" class="pane">
@@ -154,6 +162,17 @@
           </div>
         </div>
 
+        <div id="chatPane" class="pane hidden">
+          <div class="alerts-block">
+            <span class="block-title">Claves de los proveedores</span>
+            <p class="hint">Se guardan cifradas con Windows (DPAPI) en %APPDATA%\Alero\keys.json. La interfaz nunca vuelve a mostrarlas.</p>
+            <div id="keyList" class="key-list"></div>
+          </div>
+          <div class="alerts-block">
+            <p class="hint">Ollama local no necesita clave: <code>http://127.0.0.1:11434</code>.</p>
+          </div>
+        </div>
+
         <div class="settings-foot">
           <span id="settingsMessage" class="settings-message" role="status"></span>
           <button id="saveProfiles" class="primary">Guardar</button>
@@ -164,8 +183,11 @@
     <div id="grip" class="grip" aria-hidden="true"></div>
   </div>
 
+  <script src="chat.js"></script>
   <script src="vendor/xterm.js"></script>
   <script src="vendor/addon-fit.js"></script>
+  <script src="vendor/addon-search.js"></script>
+  <script src="vendor/addon-web-links.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

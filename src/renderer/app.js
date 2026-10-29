@@ -32,6 +32,12 @@ const el = {
   terminalsEmpty: document.getElementById('terminalsEmpty'),
   newTabHint: document.getElementById('newTabHint'),
 
+  termSearch: document.getElementById('termSearch'),
+  termSearchInput: document.getElementById('termSearchInput'),
+  termSearchPrev: document.getElementById('termSearchPrev'),
+  termSearchNext: document.getElementById('termSearchNext'),
+  termSearchClose: document.getElementById('termSearchClose'),
+
   alert: document.getElementById('alert'),
   alertTitle: document.getElementById('alertTitle'),
   alertBody: document.getElementById('alertBody'),
@@ -52,6 +58,9 @@ const el = {
   alertApprove: document.getElementById('alertApprove'),
   alertSeconds: document.getElementById('alertSeconds'),
   tabBar: document.getElementById('tabBar'),
+  tabChat: document.getElementById('tabChat'),
+  chatPane: document.getElementById('chatPane'),
+  keyList: document.getElementById('keyList'),
   barPane: document.getElementById('barPane'),
   collapseBlur: document.getElementById('collapseBlur'),
   collapseIdle: document.getElementById('collapseIdle'),
@@ -103,10 +112,18 @@ function newTerm() {
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
-  return { term, fit };
+
+  const search = new SearchAddon.SearchAddon();
+  term.loadAddon(search);
+
+  // Los enlaces se abren en el navegador; el proceso principal corta la ventana.
+  term.loadAddon(new WebLinksAddon.WebLinksAddon());
+
+  return { term, fit, search };
 }
 
 function fitTab(tab) {
+  if (!tab || !tab.term) return;
   if (!expanded || animating || !fontsReady) return;
   try {
     tab.fit.fit();
@@ -123,11 +140,44 @@ async function addTab(profileId, { select = true } = {}) {
   const profile = profileById(profileId);
   if (!profile) return;
 
+  // Perfil de tipo chat: no hay terminal, hay conversación.
+  if (profile.kind === 'chat') {
+    const id = `chat-${crypto.randomUUID()}`;
+    const chat = AleroChat.create({
+      profile,
+      id,
+      onActivity: noteActivity,
+      onModelChange: (model) => {
+        const target = profiles.find((p) => p.id === profile.id);
+        if (!target || target.model === model) return;
+        target.model = model;
+        window.alero.saveSettings({ profiles });
+      },
+    });
+    el.terminals.appendChild(chat.el);
+
+    const chatTab = {
+      id,
+      profile: profile.id,
+      title: profile.label,
+      color: profile.color,
+      kind: 'chat',
+      chat,
+      holder: chat.el,
+      dead: false,
+    };
+    tabs.set(id, chatTab);
+    if (select) activate(id);
+    else { renderTabs(); refreshChrome(); }
+    saveTabs();
+    return chatTab;
+  }
+
   const holder = document.createElement('div');
   holder.className = 'term';
   el.terminals.appendChild(holder);
 
-  const { term, fit } = newTerm();
+  const { term, fit, search } = newTerm();
   term.open(holder);
 
   // Con la ventana plegada, xterm no tiene tamaño útil: se usa uno razonable y
@@ -166,8 +216,10 @@ async function addTab(profileId, { select = true } = {}) {
     profile: profile.id,
     title: profile.label,
     color: profile.color,
+    kind: 'terminal',
     term,
     fit,
+    search,
     holder,
     dead: false,
   };
@@ -194,24 +246,14 @@ async function ensureLogo(profile) {
 }
 
 function renderBrand() {
-  // El logo del perfil solo sustituye a la marca con la barra abierta y una
-  // pestaña activa. Sin pestañas y abierta, la barra no repite «Alero»: ya lo
-  // dice el estado vacío del panel.
-  const noTabs = tabs.size === 0;
-  const hideBrand = expanded && noTabs;
-  const profile = expanded && !noTabs ? profileOf(tabs.get(activeId)) : null;
-  const data = profile?.logo ? logoCache.get(profile.logo) : '';
-  const hasLogo = !hideBrand && Boolean(data);
+  // El logo es del perfil, así que vive en su pestaña. Al principio, abierta,
+  // solo la marca; el nombre «Alero» aparece cuando la barra está plegada. Sin
+  // pestañas y abierta no se ve nada: ya lo dice el estado vacío del panel.
+  const hideBrand = expanded && tabs.size === 0;
 
-  el.brandLogo.classList.toggle('hidden', !hasLogo);
-  if (hasLogo) {
-    el.brandLogo.src = data;
-    el.brandLogo.alt = profile.label;
-  }
-
-  const showWordmark = !hasLogo && !hideBrand;
-  el.brandMark.classList.toggle('hidden', !showWordmark);
-  el.brandName.classList.toggle('hidden', !showWordmark);
+  el.brandLogo.classList.add('hidden');
+  el.brandMark.classList.toggle('hidden', hideBrand);
+  el.brandName.classList.toggle('hidden', hideBrand || expanded);
 }
 
 /**
@@ -251,7 +293,10 @@ function activate(id) {
   refreshChrome();
   const tab = tabs.get(id);
   fitTab(tab);
-  if (expanded && !isSettingsOpen()) tab.term.focus();
+  if (expanded && !isSettingsOpen()) {
+    if (tab.term) tab.term.focus();
+    else tab.chat?.focus();
+  }
 }
 
 let pendingClose = null;
@@ -308,8 +353,13 @@ function closeTab(id) {
   pendingClose = null;
   const tab = tabs.get(id);
   if (!tab) return;
-  window.alero.killTab(id);
-  tab.term.dispose();
+  if (tab.kind === 'chat') {
+    tab.chat.destroy();
+    AleroChat.remove(id);
+  } else {
+    window.alero.killTab(id);
+    tab.term.dispose();
+  }
   tab.holder.remove();
   tabs.delete(id);
 
@@ -546,6 +596,7 @@ const SHORTCUT_DEFS = [
   { key: 'closeTab', title: 'Cerrar la pestaña actual', global: false },
   { key: 'nextTab', title: 'Pestaña siguiente', global: false },
   { key: 'prevTab', title: 'Pestaña anterior', global: false },
+  { key: 'search', title: 'Buscar en la terminal', global: false },
   { key: 'copy', title: 'Copiar de la terminal', global: false },
   { key: 'paste', title: 'Pegar en la terminal', global: false },
 ];
@@ -693,10 +744,11 @@ function setSettingsTab(tab) {
   stopRecording();
 
   const tabs = {
-    profiles: { button: el.tabProfiles, pane: el.profilesPane, title: 'Perfiles de terminal' },
+    profiles: { button: el.tabProfiles, pane: el.profilesPane, title: 'Perfiles' },
     shortcuts: { button: el.tabShortcuts, pane: el.shortcutsPane, title: 'Atajos' },
     alerts: { button: el.tabAlerts, pane: el.alertsPane, title: 'Avisos' },
     bar: { button: el.tabBar, pane: el.barPane, title: 'Barra' },
+    chat: { button: el.tabChat, pane: el.chatPane, title: 'Chat' },
   };
 
   for (const [name, item] of Object.entries(tabs)) {
@@ -711,15 +763,18 @@ function setSettingsTab(tab) {
 
   el.settingsMessage.textContent = '';
   const hints = {
-    profiles: 'Cada perfil es una entrada del menú <strong>+</strong>. La carpeta es donde arranca la terminal; el comando se escribe en la shell elegida.',
+    profiles: 'Cada perfil es una entrada del menú <strong>+</strong>. Los de tipo <strong>terminal</strong> arrancan una shell con su carpeta y comando; los de tipo <strong>chat</strong> abren una conversación con el proveedor elegido.',
     shortcuts: 'Pulsa un atajo y graba la combinación nueva con el teclado. <strong>Esc</strong> cancela la grabación.',
     alerts: 'Alero puede avisarte cuando Claude Code termina, pide permiso o te pregunta algo, aunque la barra esté plegada.',
     bar: 'Cuándo se vuelve a plegar sola la barra. Las dos reglas son independientes y se pueden combinar.',
+    chat: 'Claves de los proveedores para los perfiles de tipo chat. Se guardan cifradas y nunca se vuelven a mostrar.',
   };
   el.settingsHint.innerHTML = hints[tab] || hints.profiles;
 
   if (tab === 'alerts') renderAlertsPane();
   if (tab === 'bar') renderBarPane();
+  if (tab === 'chat') renderChatKeys();
+  if (tab === 'profiles') refreshKeyNotes();
 }
 
 // ── Ajustes: perfiles ────────────────────────────────────────────────────────
@@ -744,6 +799,120 @@ function copyAlerts(source) {
     events: { ...(source.events || {}) },
     profiles: { ...(source.profiles || {}) },
   };
+}
+
+const CHAT_DEFAULT_BASE = {
+  anthropic: 'https://api.anthropic.com',
+  openai: 'https://api.openai.com',
+  gemini: 'https://generativelanguage.googleapis.com',
+  ollama: 'http://127.0.0.1:11434',
+};
+
+/** Rellena la lista de modelos del proveedor; si no hay, se puede escribir. */
+async function fillModels(input, datalist, provider, baseUrl) {
+  datalist.textContent = '';
+  let list = [];
+  try {
+    list = await window.alero.chatModels(provider, baseUrl);
+  } catch {
+    list = [];
+  }
+
+  for (const id of list) {
+    const option = document.createElement('option');
+    option.value = id;
+    datalist.appendChild(option);
+  }
+
+  if (list.length && !input.value.trim()) input.value = list[0];
+  input.placeholder = list.length
+    ? `${list.length} modelos · escribe o elige`
+    : provider === 'ollama'
+      ? 'no se pudo cargar (¿Ollama encendido?)'
+      : 'sin clave o sin conexión';
+}
+
+const CHAT_PROVIDERS = [
+  ['anthropic', 'Anthropic'],
+  ['openai', 'OpenAI'],
+  ['gemini', 'Google Gemini'],
+];
+
+async function renderChatKeys() {
+  if (!el.keyList) return;
+  const status = await window.alero.keysStatus();
+  el.keyList.textContent = '';
+
+  for (const [id, name] of CHAT_PROVIDERS) {
+    const row = document.createElement('div');
+    row.className = 'key-row';
+
+    const label = document.createElement('span');
+    label.className = 'key-name';
+    label.textContent = name;
+
+    const input = document.createElement('input');
+    input.type = 'password';
+    input.placeholder = status[id] ? 'Guardada · escribe para cambiarla' : 'Pega tu clave';
+    input.autocomplete = 'off';
+
+    const state = document.createElement('span');
+    state.className = 'key-state';
+    state.textContent = status[id] ? 'Guardada' : 'Sin clave';
+
+    const button = document.createElement('button');
+    const sync = () => {
+      button.textContent = status[id] && !input.value.trim() ? 'Quitar' : 'Guardar';
+    };
+    input.addEventListener('input', sync);
+    sync();
+
+    button.addEventListener('click', async () => {
+      const value = input.value.trim();
+      if (!value && !status[id]) return;
+      const result = await window.alero.setKey(id, value);
+      if (!result.ok) {
+        state.textContent = result.error || 'Error';
+        return;
+      }
+      await renderChatKeys();
+    });
+
+    row.append(label, input, state, button);
+    el.keyList.appendChild(row);
+  }
+}
+
+const PROVIDER_NAMES = { anthropic: 'Anthropic', openai: 'OpenAI', gemini: 'Google Gemini', ollama: 'Ollama' };
+
+/** Avisa en cada tarjeta de chat si falta la clave de su proveedor. */
+async function refreshKeyNotes() {
+  const notes = [...document.querySelectorAll('.key-note')];
+  if (!notes.length) return;
+
+  let status = {};
+  try {
+    status = await window.alero.keysStatus();
+  } catch {
+    status = {};
+  }
+
+  for (const note of notes) {
+    const provider = note.dataset.provider;
+    if (!provider || provider === 'ollama' || status[provider]) {
+      note.classList.add('hidden');
+      note.textContent = '';
+      continue;
+    }
+
+    note.textContent = `Sin clave de ${PROVIDER_NAMES[provider] || provider}. `;
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.textContent = 'Ir a Ajustes → Chat';
+    go.addEventListener('click', () => setSettingsTab('chat'));
+    note.appendChild(go);
+    note.classList.remove('hidden');
+  }
 }
 
 function copyCollapse(source) {
@@ -932,6 +1101,30 @@ function noteActivity() {
   }, seconds * 1000);
 }
 
+function openSearch() {
+  const tab = tabs.get(activeId);
+  if (!tab?.search) return;
+  el.termSearch.classList.remove('hidden');
+  el.termSearchInput.focus();
+  el.termSearchInput.select();
+}
+
+function closeSearch() {
+  el.termSearch.classList.add('hidden');
+  const tab = tabs.get(activeId);
+  if (tab?.search?.clearDecorations) tab.search.clearDecorations();
+  if (tab?.term) tab.term.focus();
+}
+
+function searchStep(back) {
+  const tab = tabs.get(activeId);
+  const text = el.termSearchInput.value;
+  if (!tab?.search || !text) return;
+  const options = { caseSensitive: false, incremental: true };
+  if (back) tab.search.findPrevious(text, options);
+  else tab.search.findNext(text, options);
+}
+
 function openSettings() {
   closeMenu();
   if (!expanded) window.alero.expand();
@@ -954,7 +1147,10 @@ function closeSettings() {
   refreshChrome();
   noteActivity();
   const tab = tabs.get(activeId);
-  if (tab && expanded) tab.term.focus();
+  if (tab && expanded) {
+    if (tab.term) tab.term.focus();
+    else tab.chat?.focus();
+  }
 }
 
 function field(labelText, control, wide = false) {
@@ -1053,6 +1249,21 @@ function renderProfileEditor() {
 
     head.append(slot, color, label, remove);
 
+    const kind = document.createElement('select');
+    kind.className = 'ptype';
+    for (const [value, text] of [['terminal', 'Terminal'], ['chat', 'Chat']]) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = text;
+      if ((profile.kind === 'chat' ? 'chat' : 'terminal') === value) option.selected = true;
+      kind.appendChild(option);
+    }
+    kind.addEventListener('change', () => {
+      draft = readEditor();
+      draft[index].kind = kind.value;
+      renderProfileEditor();
+    });
+
     const shell = document.createElement('select');
     shell.className = 'shell';
     for (const [value, text] of [['powershell', 'PowerShell'], ['cmd', 'cmd']]) {
@@ -1077,11 +1288,69 @@ function renderProfileEditor() {
 
     const grid = document.createElement('div');
     grid.className = 'card-grid';
-    grid.append(
-      field('Shell', shell),
-      field('Carpeta', cwd),
-      field('Comando', command, true),
-    );
+    grid.append(field('Tipo', kind));
+
+    if (profile.kind === 'chat') {
+      // Chat: proveedor, modelo y URL base (para OpenAI-compatible y Ollama).
+      const providerId = profile.provider || 'ollama';
+      const provider = document.createElement('select');
+      provider.className = 'provider';
+      for (const [value, text] of [
+        ['anthropic', 'Anthropic'],
+        ['openai', 'OpenAI / compatible'],
+        ['gemini', 'Google Gemini'],
+        ['ollama', 'Ollama local'],
+      ]) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        if (providerId === value) option.selected = true;
+        provider.appendChild(option);
+      }
+      provider.addEventListener('change', () => {
+        // Al cambiar de proveedor, modelo y URL vuelven a los del nuevo.
+        draft = readEditor();
+        draft[index].provider = provider.value;
+        draft[index].model = '';
+        draft[index].baseUrl = '';
+        renderProfileEditor();
+      });
+
+      const model = document.createElement('input');
+      model.type = 'text';
+      model.className = 'model';
+      model.value = profile.model || '';
+      model.placeholder = 'cargando modelos…';
+      model.autocomplete = 'off';
+
+      const listId = `models-${index}-${Date.now()}`;
+      const datalist = document.createElement('datalist');
+      datalist.id = listId;
+      model.setAttribute('list', listId);
+
+      const baseUrl = document.createElement('input');
+      baseUrl.type = 'text';
+      baseUrl.className = 'baseurl';
+      baseUrl.value = profile.baseUrl || CHAT_DEFAULT_BASE[providerId] || '';
+      baseUrl.placeholder = 'URL del proveedor';
+
+      card.appendChild(datalist);
+      fillModels(model, datalist, providerId, baseUrl.value);
+
+      const keyNote = document.createElement('div');
+      keyNote.className = 'key-note hidden';
+      keyNote.dataset.provider = providerId;
+      card.append(keyNote);
+      refreshKeyNotes();
+
+      grid.append(field('Proveedor', provider), field('Modelo', model), field('URL base', baseUrl, true));
+    } else {
+      grid.append(
+        field('Shell', shell),
+        field('Carpeta', cwd),
+        field('Comando', command, true),
+      );
+    }
 
     card.append(head, grid);
     el.profileList.appendChild(card);
@@ -1093,15 +1362,22 @@ function renderProfileEditor() {
 
 function readEditor() {
   const rows = [...el.profileList.querySelectorAll('.profile-card')];
-  return rows.map((row) => ({
-    id: row.dataset.id,
-    label: row.querySelector('.label').value.trim() || 'Perfil',
-    shell: row.querySelector('.shell').value,
-    cwd: row.querySelector('.cwd').value.trim(),
-    command: row.querySelector('.command').value.trim(),
-    logo: row.dataset.logo || '',
-    color: row.querySelector('.color').value,
-  }));
+  return rows.map((row) => {
+    const kind = row.querySelector('.ptype')?.value === 'chat' ? 'chat' : 'terminal';
+    return {
+      id: row.dataset.id,
+      label: row.querySelector('.label').value.trim() || 'Perfil',
+      kind,
+      shell: row.querySelector('.shell')?.value || 'powershell',
+      cwd: row.querySelector('.cwd')?.value.trim() || '',
+      command: row.querySelector('.command')?.value.trim() || '',
+      provider: row.querySelector('.provider')?.value || 'ollama',
+      model: row.querySelector('.model')?.value.trim() || '',
+      baseUrl: row.querySelector('.baseurl')?.value.trim() || '',
+      logo: row.dataset.logo || '',
+      color: row.querySelector('.color').value,
+    };
+  });
 }
 
 function slugify(label, taken) {
@@ -1141,9 +1417,13 @@ function readProfiles() {
     return {
       id,
       label: p.label,
+      kind: p.kind === 'chat' ? 'chat' : 'terminal',
       shell: p.shell === 'cmd' ? 'cmd' : 'powershell',
       cwd: p.cwd || '',
       command: p.command,
+      provider: p.provider || 'ollama',
+      model: p.model || '',
+      baseUrl: p.baseUrl === CHAT_DEFAULT_BASE[p.provider || 'ollama'] ? '' : (p.baseUrl || ''),
       color: p.color || '#c2703f',
       logo: p.logo || '',
     };
@@ -1225,7 +1505,10 @@ function applyState(state) {
     requestAnimationFrame(() => {
       for (const tab of tabs.values()) fitTab(tab);
       const tab = tabs.get(activeId) || tabs.values().next().value;
-      if (tab && !isSettingsOpen()) tab.term.focus();
+      if (tab && !isSettingsOpen()) {
+        if (tab.term) tab.term.focus();
+        else tab.chat?.focus();
+      }
       noteActivity();
     });
   } else {
@@ -1250,6 +1533,15 @@ document.addEventListener('keydown', (e) => {
 
   // Renombrando una pestaña: las teclas son del campo, no de la interfaz.
   if (e.target instanceof HTMLInputElement && e.target.classList.contains('tab-rename')) return;
+
+  // Buscador de la terminal: Esc lo cierra y lo demás es del campo.
+  if (e.target === el.termSearchInput) {
+    if (e.key === 'Escape') {
+      swallow();
+      closeSearch();
+    }
+    return;
+  }
 
   // Grabando un atajo: las teclas son del grabador, no de la interfaz.
   if (recording) return;
@@ -1328,9 +1620,15 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
+  if (matches(shortcuts.search, e)) {
+    swallow();
+    openSearch();
+    return;
+  }
+
   if (matches(shortcuts.copy, e)) {
     const tab = tabs.get(activeId);
-    const selection = tab?.term.getSelection();
+    const selection = tab?.term?.getSelection();
     if (selection) {
       swallow();
       window.alero.writeClipboard(selection);
@@ -1343,7 +1641,7 @@ document.addEventListener('keydown', (e) => {
     swallow();
     window.alero.readClipboard().then((text) => {
       const tab = tabs.get(activeId);
-      if (tab && text) window.alero.input(tab.id, text);
+      if (tab?.term && text) window.alero.input(tab.id, text);
     });
   }
 }, true);
@@ -1373,11 +1671,16 @@ async function init() {
 
   window.alero.onData((id, data) => {
     const tab = tabs.get(id);
-    if (tab) tab.term.write(data);
+    if (tab?.term) tab.term.write(data);
   });
   window.alero.onExit((id) => markDead(id));
   window.alero.onState((state) => applyState(state));
   window.alero.onNewTab(() => openMenu());
+
+  // Chat: los trozos llegan por id de conversación.
+  window.alero.onChatDelta((data) => AleroChat.get(data.id)?.delta(data.text));
+  window.alero.onChatDone((data) => AleroChat.get(data.id)?.done());
+  window.alero.onChatError((data) => AleroChat.get(data.id)?.error(data.aborted ? 'Detenido.' : data.message));
   window.alero.onAlert((data) => showAlert(data));
   window.alero.onAlertClear(() => clearAlertUi());
 
@@ -1415,6 +1718,19 @@ async function init() {
   el.tabShortcuts.addEventListener('click', () => setSettingsTab('shortcuts'));
   el.tabAlerts.addEventListener('click', () => setSettingsTab('alerts'));
   el.tabBar.addEventListener('click', () => setSettingsTab('bar'));
+  el.tabChat.addEventListener('click', () => setSettingsTab('chat'));
+
+  // Buscador de la terminal.
+  el.termSearchInput.addEventListener('input', () => searchStep(false));
+  el.termSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchStep(e.shiftKey);
+    }
+  });
+  el.termSearchNext.addEventListener('click', () => searchStep(false));
+  el.termSearchPrev.addEventListener('click', () => searchStep(true));
+  el.termSearchClose.addEventListener('click', () => closeSearch());
 
   el.hooksToggle.addEventListener('click', previewHooks);
   el.hooksCancel.addEventListener('click', () => {
