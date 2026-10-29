@@ -47,11 +47,23 @@ configures.
 
 ### Instalador
 
-Descarga `Alero-Setup-0.2.0.exe` (o compílalo, ver abajo) y ejecútalo. Se instala
-por usuario, sin permisos de administrador, con accesos en el escritorio y en el
-menú de inicio. El instalador **no está firmado**, así que Windows mostrará el
-aviso de SmartScreen la primera vez: *Más información → Ejecutar de todas
-formas*.
+Descarga el instalador desde la página de
+[**releases**](https://github.com/JUANRESTREPO95/alero/releases/latest):
+[Alero-Setup-0.2.0.exe](https://github.com/JUANRESTREPO95/alero/releases/download/v0.2.0/Alero-Setup-0.2.0.exe).
+Se instala por usuario, sin permisos de administrador, con accesos en el
+escritorio y en el menú de inicio.
+
+El instalador **no está firmado**, así que Windows mostrará el aviso de
+SmartScreen la primera vez: *Más información → Ejecutar de todas formas*.
+
+Para comprobar que la descarga está íntegra, junto al instalador hay un
+`.sha256`. En Windows:
+
+```powershell
+Get-FileHash .Alero-Setup-0.2.0.exe -Algorithm SHA256
+```
+
+Debe coincidir con el contenido de `Alero-Setup-0.2.0.exe.sha256`.
 
 ### Desde el código
 
