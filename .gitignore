@@ -1,0 +1,14 @@
+# Dependencias y binarios
+node_modules/
+tools/
+dist/
+out/
+
+# Lanzador local (rutas absolutas de este PC)
+Alero.lnk
+
+# Registros y temporales
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

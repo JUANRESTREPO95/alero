@@ -1,0 +1,301 @@
+/* Alero — estilos. La ventana es transparente; el cristal es #shell. */
+
+:root {
+  --bg: #0e1117;
+  --bg-soft: #151a23;
+  --line: #232a36;
+  --text: #e6e9ef;
+  --muted: #8b93a7;
+  --accent: #0a84ff;
+  --bar-height: 36px;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  user-select: none;
+}
+
+#shell {
+  position: relative;
+  height: 100%;
+  background: color-mix(in srgb, var(--bg) 97%, transparent);
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+
+/* La barra */
+#bar {
+  height: var(--bar-height);
+  min-height: var(--bar-height);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 12px;
+  background: linear-gradient(180deg, #121722, #0e1117);
+  border-bottom: 1px solid var(--line);
+  -webkit-app-region: no-drag;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.brand .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+#tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 6px 0 10px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+  max-width: 190px;
+}
+.tab:hover { background: var(--bg-soft); color: var(--text); }
+.tab.active {
+  background: var(--bg-soft);
+  color: var(--text);
+  border-color: var(--line);
+}
+.tab .kind {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tab-color, var(--muted));
+  flex: 0 0 auto;
+}
+.tab.dead { opacity: .5; text-decoration: line-through; }
+.tab .name { overflow: hidden; text-overflow: ellipsis; }
+.tab .close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: .6;
+  font-size: 13px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.tab .close:hover { background: #2a3242; opacity: 1; }
+
+.actions { display: flex; gap: 4px; flex: 0 0 auto; }
+
+.icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.icon:hover { background: var(--bg-soft); color: var(--text); border-color: var(--line); }
+
+/* Menú de tipo de pestaña */
+.menu {
+  position: absolute;
+  top: calc(var(--bar-height) + 4px);
+  right: 42px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .5);
+}
+.menu.hidden { display: none; }
+.menu button {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.menu button:hover { background: #222a37; }
+.menu-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #0a84ff);
+  flex: 0 0 auto;
+  margin-right: 8px;
+}
+.menu-sep { height: 1px; background: var(--line); margin: 4px 2px; }
+
+/* Terminales */
+#terminals {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+.term {
+  position: absolute;
+  inset: 0;
+  padding: 8px 6px 6px 10px;
+  display: none;
+}
+.term.active { display: block; }
+
+/* Colapsada: solo la barra, sin panel */
+#shell.collapsed #terminals { display: none; }
+#shell.collapsed { border-radius: 0 0 10px 10px; }
+
+/* ── Ajustes: perfiles de terminal ─────────────────────────────────────────── */
+
+.settings {
+  position: absolute;
+  inset: var(--bar-height) 0 0 0;
+  background: var(--bg);
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+  z-index: 10;
+}
+.settings.hidden { display: none; }
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .2px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 8px 0 12px;
+  user-select: text;
+}
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-row {
+  display: grid;
+  grid-template-columns: 28px 140px 104px 190px minmax(120px, 1fr) 26px;
+  gap: 8px;
+  align-items: center;
+}
+
+.profile-row input[type="text"],
+.profile-row select {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  min-width: 0;
+  user-select: text;
+}
+.profile-row input[type="text"]:focus,
+.profile-row select:focus {
+  outline: 1px solid var(--accent);
+  border-color: var(--accent);
+}
+
+.profile-row input.color {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.profile-row .remove {
+  width: 24px;
+  height: 24px;
+  font-size: 15px;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.settings-actions .spacer { flex: 1; }
+
+.settings-actions button {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings-actions button:hover { background: #222a37; }
+.settings-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.settings-actions button.primary:hover { filter: brightness(1.08); }
