@@ -16,19 +16,30 @@ const el = {
   restoreProfiles: document.getElementById('restoreProfiles'),
   saveProfiles: document.getElementById('saveProfiles'),
   closeSettings: document.getElementById('closeSettings'),
+  tabProfiles: document.getElementById('tabProfiles'),
+  tabShortcuts: document.getElementById('tabShortcuts'),
+  profilesPane: document.getElementById('profilesPane'),
+  shortcutsPane: document.getElementById('shortcutsPane'),
+  shortcutList: document.getElementById('shortcutList'),
+  settingsMessage: document.getElementById('settingsMessage'),
+  settingsHint: document.getElementById('settingsHint'),
+  profileActions: document.getElementById('profileActions'),
+  settingsTitle: document.getElementById('settingsTitle'),
 };
 
+// La terminal usa el mismo suelo que el resto: superficie del sheet, tinta
+// blanca y la arcilla solo en el cursor.
 const THEME = {
-  background: '#0e1117',
-  foreground: '#e6e9ef',
-  cursor: '#0a84ff',
-  cursorAccent: '#0e1117',
-  selectionBackground: '#2a3a55',
-  black: '#1b1f27', red: '#ff6b6b', green: '#5ad07a', yellow: '#e5c07b',
-  blue: '#61afef', magenta: '#c678dd', cyan: '#56b6c2', white: '#d7dae0',
-  brightBlack: '#5c6370', brightRed: '#ff8787', brightGreen: '#7ee2a0',
-  brightYellow: '#f0d29a', brightBlue: '#8cc4ff', brightMagenta: '#ddb3ef',
-  brightCyan: '#7fd4de', brightWhite: '#ffffff',
+  background: '#131217',
+  foreground: '#e6e6e8',
+  cursor: '#c2703f',
+  cursorAccent: '#131217',
+  selectionBackground: '#2f2d33',
+  black: '#1b1a1f', red: '#e5566f', green: '#44a282', yellow: '#d9a441',
+  blue: '#6f9fd8', magenta: '#b48ead', cyan: '#5fa8a0', white: '#d7d7da',
+  brightBlack: '#8a8c92', brightRed: '#f0788c', brightGreen: '#5fc39c',
+  brightYellow: '#e8bd6e', brightBlue: '#8fb9e8', brightMagenta: '#c9a6c4',
+  brightCyan: '#7cc0b8', brightWhite: '#ffffff',
 };
 
 /** ptyId → { id, profile, title, color, term, fit, holder, dead } */
@@ -36,13 +47,16 @@ const tabs = new Map();
 let activeId = null;
 let settings = null;
 let profiles = [];
+let shortcuts = {};
+let draftShortcuts = {};
+let recording = null;
 let expanded = false;
 
 // ── Pestañas ─────────────────────────────────────────────────────────────────
 
 function newTerm() {
   const term = new Terminal({
-    fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
+    fontFamily: '"JetBrains Mono", Consolas, monospace', // taste-skill-ignore mono: la terminal es código
     fontSize: 13,
     lineHeight: 1.15,
     cursorBlink: true,
@@ -205,18 +219,42 @@ function saveTabs() {
 
 // ── Menú «+» ─────────────────────────────────────────────────────────────────
 
+let menuIndex = 0;
+
+function menuButtons() {
+  return [...el.menu.querySelectorAll('button')];
+}
+
+function setMenuIndex(index) {
+  const buttons = menuButtons();
+  if (!buttons.length) return;
+  menuIndex = (index + buttons.length) % buttons.length;
+  buttons.forEach((button, n) => {
+    button.classList.toggle('selected', n === menuIndex);
+  });
+}
+
+function pickMenu(index = menuIndex) {
+  const button = menuButtons()[index];
+  if (!button) return;
+  closeMenu();
+  if (button.dataset.action === 'settings') openSettings();
+  else if (button.dataset.profile) addTab(button.dataset.profile);
+}
+
 function renderMenu() {
   el.menu.textContent = '';
 
   for (const p of profiles) {
     const button = document.createElement('button');
     button.dataset.profile = p.id;
-    button.style.setProperty('--accent', p.color || '#0a84ff');
+    button.style.setProperty('--accent', p.color || '#c2703f');
     const dot = document.createElement('span');
     dot.className = 'menu-dot';
     const label = document.createElement('span');
     label.textContent = p.label;
     button.append(dot, label);
+    button.addEventListener('mouseenter', () => setMenuIndex(menuButtons().indexOf(button)));
     el.menu.appendChild(button);
   }
 
@@ -229,6 +267,7 @@ function renderMenu() {
   const configure = document.createElement('button');
   configure.dataset.action = 'settings';
   configure.textContent = 'Configurar…';
+  configure.addEventListener('mouseenter', () => setMenuIndex(menuButtons().indexOf(configure)));
   el.menu.appendChild(configure);
 }
 
@@ -240,6 +279,7 @@ function openMenu() {
     el.menu.style.top = `${rect.bottom + 4}px`;
     el.menu.style.right = 'auto';
     el.menu.classList.remove('hidden');
+    setMenuIndex(0);
   };
   if (!expanded) {
     window.alero.expand();
@@ -251,6 +291,174 @@ function openMenu() {
 
 function closeMenu() {
   el.menu.classList.add('hidden');
+  menuButtons().forEach((button) => button.classList.remove('selected'));
+}
+
+// ── Atajos ──────────────────────────────────────────────────────────────────
+
+const SHORTCUT_DEFS = [
+  { key: 'toggle', title: 'Mostrar / plegar', global: true },
+  { key: 'newTab', title: 'Nueva pestaña', global: true },
+  { key: 'closeTab', title: 'Cerrar la pestaña actual', global: false },
+  { key: 'nextTab', title: 'Pestaña siguiente', global: false },
+  { key: 'prevTab', title: 'Pestaña anterior', global: false },
+  { key: 'copy', title: 'Copiar de la terminal', global: false },
+  { key: 'paste', title: 'Pegar en la terminal', global: false },
+];
+
+const MODIFIERS = new Set(['Control', 'Alt', 'Shift', 'Meta']);
+const KEY_NAMES = {
+  ' ': 'Space',
+  Spacebar: 'Space',
+  ArrowUp: 'Up',
+  ArrowDown: 'Down',
+  ArrowLeft: 'Left',
+  ArrowRight: 'Right',
+  Enter: 'Return',
+  Escape: 'Escape',
+};
+const KEY_LABELS = {
+  Control: 'Ctrl',
+  Super: 'Win',
+  Space: 'Espacio',
+  Tab: 'Tab',
+  Return: 'Intro',
+  Escape: 'Esc',
+  Up: '↑',
+  Down: '↓',
+  Left: '←',
+  Right: '→',
+};
+
+function friendly(accel) {
+  if (!accel) return 'Sin asignar';
+  return accel.split('+').map((part) => KEY_LABELS[part] || part).join(' + ');
+}
+
+function eventKey(e) {
+  if (KEY_NAMES[e.key]) return KEY_NAMES[e.key];
+  return e.key.length === 1 ? e.key.toUpperCase() : e.key;
+}
+
+function parseAccel(accel) {
+  const parts = String(accel || '').split('+').filter(Boolean);
+  const key = parts.pop() || '';
+  return {
+    key,
+    ctrl: parts.includes('Control'),
+    alt: parts.includes('Alt'),
+    shift: parts.includes('Shift'),
+    meta: parts.includes('Super'),
+  };
+}
+
+function matches(accel, e) {
+  if (!accel) return false;
+  const a = parseAccel(accel);
+  if (e.ctrlKey !== a.ctrl || e.altKey !== a.alt || e.shiftKey !== a.shift || e.metaKey !== a.meta) {
+    return false;
+  }
+  return eventKey(e) === a.key;
+}
+
+function accelFromEvent(e) {
+  if (MODIFIERS.has(e.key)) return null;
+  const parts = [];
+  if (e.ctrlKey) parts.push('Control');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  if (e.metaKey) parts.push('Super');
+  return [...parts, eventKey(e)].join('+');
+}
+
+function renderShortcuts() {
+  el.shortcutList.textContent = '';
+
+  for (const def of SHORTCUT_DEFS) {
+    const row = document.createElement('div');
+    row.className = 'shortcut-row';
+
+    const label = document.createElement('div');
+    label.className = 'shortcut-label';
+    const title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = def.title;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = def.global ? 'Global: funciona con cualquier app' : 'Con Alero enfocado';
+    label.append(title, meta);
+
+    const cap = document.createElement('button');
+    cap.className = 'keycap' + (recording === def.key ? ' recording' : '');
+    cap.textContent = recording === def.key ? 'Pulsa una combinación…' : friendly(draftShortcuts[def.key]);
+    cap.setAttribute('aria-label', `Cambiar el atajo de ${def.title}`);
+    cap.addEventListener('click', () => startRecording(def.key));
+
+    row.append(label, cap);
+    el.shortcutList.appendChild(row);
+  }
+}
+
+function startRecording(key) {
+  recording = key;
+  el.settingsMessage.textContent = '';
+  renderShortcuts();
+  document.addEventListener('keydown', onRecord, true);
+}
+
+function stopRecording() {
+  if (!recording) return;
+  recording = null;
+  document.removeEventListener('keydown', onRecord, true);
+  renderShortcuts();
+}
+
+function onRecord(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (e.key === 'Escape') {
+    stopRecording();
+    return;
+  }
+
+  const accel = accelFromEvent(e);
+  if (!accel) return; // solo modificadores: seguimos esperando
+
+  const def = SHORTCUT_DEFS.find((d) => d.key === recording);
+  if (!def) return;
+
+  if (def.global && !accel.split('+').some((p) => ['Control', 'Alt', 'Super'].includes(p))) {
+    el.settingsMessage.textContent = 'Un atajo global necesita Ctrl, Alt o Win.';
+    return;
+  }
+
+  const conflict = SHORTCUT_DEFS.find(
+    (d) => d.key !== recording && draftShortcuts[d.key] === accel,
+  );
+  if (conflict) {
+    el.settingsMessage.textContent = `Esa combinación ya es «${conflict.title}».`;
+    return;
+  }
+
+  draftShortcuts[recording] = accel;
+  stopRecording();
+}
+
+function setSettingsTab(tab) {
+  stopRecording();
+  el.tabProfiles.classList.toggle('active', tab === 'profiles');
+  el.tabShortcuts.classList.toggle('active', tab === 'shortcuts');
+  el.profilesPane.classList.toggle('hidden', tab !== 'profiles');
+  el.shortcutsPane.classList.toggle('hidden', tab !== 'shortcuts');
+  el.profileActions.classList.toggle('hidden', tab !== 'profiles');
+  el.settingsTitle.textContent = tab === 'profiles' ? 'Perfiles de terminal' : 'Atajos';
+  el.shortcutList.scrollTop = 0;
+  el.profileList.scrollTop = 0;
+  el.settingsMessage.textContent = '';
+  el.settingsHint.innerHTML = tab === 'profiles'
+    ? 'Cada perfil es una entrada del menú <strong>+</strong>. La carpeta es donde arranca la terminal; el comando se escribe en la shell elegida.'
+    : 'Pulsa un atajo y graba la combinación nueva con el teclado. <strong>Esc</strong> cancela la grabación.';
 }
 
 // ── Ajustes: perfiles ────────────────────────────────────────────────────────
@@ -265,10 +473,12 @@ function openSettings() {
   closeMenu();
   if (!expanded) window.alero.expand();
   draft = profiles.map((p) => ({ ...p }));
+  draftShortcuts = { ...shortcuts };
   renderProfileEditor();
+  renderShortcuts();
+  el.settingsMessage.textContent = '';
+  setSettingsTab('profiles');
   el.settings.classList.remove('hidden');
-  const first = el.profileList.querySelector('input[type="text"]');
-  if (first) first.focus();
 }
 
 function closeSettings() {
@@ -277,10 +487,12 @@ function closeSettings() {
   if (tab && expanded) tab.term.focus();
 }
 
-function field(className, node) {
+function field(labelText, control, wide = false) {
   const wrap = document.createElement('label');
-  wrap.className = className;
-  wrap.appendChild(node);
+  wrap.className = 'field' + (wide ? ' wide' : '');
+  const caption = document.createElement('span');
+  caption.textContent = labelText;
+  wrap.append(caption, control);
   return wrap;
 }
 
@@ -288,21 +500,37 @@ function renderProfileEditor() {
   el.profileList.textContent = '';
 
   draft.forEach((profile, index) => {
-    const row = document.createElement('div');
-    row.className = 'profile-row';
-    row.dataset.id = profile.id;
+    const card = document.createElement('div');
+    card.className = 'profile-card';
+    card.dataset.id = profile.id;
+
+    const head = document.createElement('div');
+    head.className = 'card-head';
 
     const color = document.createElement('input');
     color.type = 'color';
-    color.value = profile.color || '#0a84ff';
-    color.title = 'Color';
+    color.value = profile.color || '#c2703f';
     color.className = 'color';
+    color.title = 'Color del perfil';
 
     const label = document.createElement('input');
     label.type = 'text';
     label.value = profile.label;
     label.placeholder = 'Nombre';
     label.className = 'label';
+    label.setAttribute('aria-label', 'Nombre del perfil');
+
+    const remove = document.createElement('button');
+    remove.className = 'remove';
+    remove.textContent = '×';
+    remove.title = 'Quitar perfil';
+    remove.setAttribute('aria-label', `Quitar ${profile.label}`);
+    remove.addEventListener('click', () => {
+      draft.splice(index, 1);
+      renderProfileEditor();
+    });
+
+    head.append(color, label, remove);
 
     const shell = document.createElement('select');
     shell.className = 'shell';
@@ -317,39 +545,37 @@ function renderProfileEditor() {
     const cwd = document.createElement('input');
     cwd.type = 'text';
     cwd.value = profile.cwd || '';
-    cwd.placeholder = 'Carpeta (vacío = tu usuario)';
+    cwd.placeholder = 'vacío = tu usuario';
     cwd.className = 'cwd';
-    cwd.title = 'Carpeta donde arranca la terminal';
 
     const command = document.createElement('input');
     command.type = 'text';
     command.value = profile.command || '';
-    command.placeholder = 'Comando (p. ej. ssh usuario@servidor) — vacío = shell limpia';
+    command.placeholder = 'ssh usuario@servidor, claude, cd C:\\ruta…';
     command.className = 'command';
 
-    const remove = document.createElement('button');
-    remove.className = 'icon remove';
-    remove.textContent = '×';
-    remove.title = 'Quitar perfil';
-    remove.addEventListener('click', () => {
-      draft.splice(index, 1);
-      renderProfileEditor();
-    });
+    const grid = document.createElement('div');
+    grid.className = 'card-grid';
+    grid.append(
+      field('Shell', shell),
+      field('Carpeta', cwd),
+      field('Comando', command, true),
+    );
 
-    row.append(color, label, shell, cwd, command, remove);
-    el.profileList.appendChild(row);
+    card.append(head, grid);
+    el.profileList.appendChild(card);
   });
 
   if (!draft.length) {
     const empty = document.createElement('div');
-    empty.className = 'hint';
+    empty.className = 'empty';
     empty.textContent = 'No hay perfiles. Añade uno para poder abrir pestañas.';
     el.profileList.appendChild(empty);
   }
 }
 
 function readEditor() {
-  const rows = [...el.profileList.querySelectorAll('.profile-row')];
+  const rows = [...el.profileList.querySelectorAll('.profile-card')];
   return rows.map((row) => ({
     id: row.dataset.id,
     label: row.querySelector('.label').value.trim() || 'Perfil',
@@ -381,17 +607,17 @@ function addDraftProfile() {
     shell: 'powershell',
     cwd: '',
     command: '',
-    color: '#7f8cff',
+    color: '#8a8c92',
   });
   renderProfileEditor();
   el.profileList.lastElementChild?.querySelector('.label')?.select();
 }
 
-async function saveProfiles() {
+function readProfiles() {
   const rows = readEditor();
   const taken = new Set();
 
-  const clean = rows.map((p) => {
+  return rows.map((p) => {
     const id = p.id || slugify(p.label, taken);
     taken.add(id);
     return {
@@ -400,18 +626,38 @@ async function saveProfiles() {
       shell: p.shell === 'cmd' ? 'cmd' : 'powershell',
       cwd: p.cwd || '',
       command: p.command,
-      color: p.color || '#0a84ff',
+      color: p.color || '#c2703f',
     };
   });
+}
 
-  if (!clean.length) {
-    // Sin perfiles no habría forma de abrir nada: no se guarda el vacío.
+async function saveAll() {
+  stopRecording();
+  el.settingsMessage.textContent = '';
+
+  // Primero los atajos globales: Windows puede negarse y hay que avisar.
+  const applied = await window.alero.applyShortcuts({ ...draftShortcuts });
+  const failed = Object.entries(applied.ok || {})
+    .filter(([, ok]) => !ok)
+    .map(([key]) => SHORTCUT_DEFS.find((d) => d.key === key)?.title || key);
+
+  shortcuts = applied.shortcuts || shortcuts;
+  draftShortcuts = { ...shortcuts };
+  renderShortcuts();
+
+  if (failed.length) {
+    el.settingsMessage.textContent =
+      `Windows no deja registrar ${failed.join(' y ')}. Se mantiene el atajo anterior.`;
     return;
   }
 
-  const saved = await window.alero.saveSettings({ profiles: clean });
-  profiles = saved.profiles || clean;
-  renderMenu();
+  const clean = readProfiles();
+  if (clean.length) {
+    const saved = await window.alero.saveSettings({ profiles: clean, shortcuts });
+    profiles = saved.profiles || clean;
+    renderMenu();
+  }
+
   closeSettings();
 }
 
@@ -447,57 +693,103 @@ function cycle(step) {
   activate(ids[(at + step + ids.length) % ids.length]);
 }
 
+// En fase de captura: las teclas que maneja la interfaz no llegan a la
+// terminal (si no, las flechas del menú se escribirían en el shell).
 document.addEventListener('keydown', (e) => {
+  // Grabando un atajo: las teclas son del grabador, no de la interfaz.
+  if (recording) return;
+
+  const swallow = () => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   if (e.key === 'Escape') {
-    if (!el.menu.classList.contains('hidden')) {
-      closeMenu();
-      return;
-    }
-    if (isSettingsOpen()) {
-      closeSettings();
-      return;
-    }
-    window.alero.collapse();
+    swallow();
+    if (!el.menu.classList.contains('hidden')) closeMenu();
+    else if (isSettingsOpen()) closeSettings();
+    else window.alero.collapse();
     return;
   }
 
   // El editor de perfiles usa estas teclas: no interceptarlas allí.
   if (isSettingsOpen()) return;
 
+  // Menú abierto: flechas para moverse, Enter para elegir, números como atajo.
   if (!el.menu.classList.contains('hidden')) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      swallow();
+      setMenuIndex(menuIndex + 1);
+      return;
+    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      swallow();
+      setMenuIndex(menuIndex - 1);
+      return;
+    }
+    if (e.key === 'Home') {
+      swallow();
+      setMenuIndex(0);
+      return;
+    }
+    if (e.key === 'End') {
+      swallow();
+      setMenuIndex(menuButtons().length - 1);
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      swallow();
+      pickMenu();
+      return;
+    }
     const index = Number(e.key);
-    if (index >= 1 && index <= profiles.length) {
-      e.preventDefault();
-      closeMenu();
-      addTab(profiles[index - 1].id);
+    if (Number.isInteger(index) && index >= 1 && index <= menuButtons().length) {
+      swallow();
+      pickMenu(index - 1);
       return;
     }
   }
 
-  if (e.ctrlKey && e.key === 'Tab') {
-    e.preventDefault();
-    cycle(e.shiftKey ? -1 : 1);
+  if (matches(shortcuts.closeTab, e)) {
+    swallow();
+    if (activeId) closeTab(activeId);
     return;
   }
 
-  if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+  if (matches(shortcuts.nextTab, e)) {
+    swallow();
+    cycle(1);
+    return;
+  }
+
+  if (matches(shortcuts.prevTab, e)) {
+    swallow();
+    cycle(-1);
+    return;
+  }
+
+  if (matches(shortcuts.copy, e)) {
     const tab = tabs.get(activeId);
     const selection = tab?.term.getSelection();
     if (selection) {
-      e.preventDefault();
+      swallow();
       window.alero.writeClipboard(selection);
       tab.term.clearSelection();
     }
     return;
   }
 
-  if (e.ctrlKey && e.shiftKey && (e.key === 'V' || e.key === 'v')) {
-    e.preventDefault();
+  if (matches(shortcuts.paste, e)) {
+    swallow();
     window.alero.readClipboard().then((text) => {
       const tab = tabs.get(activeId);
       if (tab && text) window.alero.input(tab.id, text);
     });
   }
+}, true);
+
+document.fonts?.ready.then(() => {
+  for (const tab of tabs.values()) fitTab(tab);
 });
 
 window.addEventListener('resize', () => {
@@ -509,6 +801,7 @@ window.addEventListener('resize', () => {
 async function init() {
   settings = await window.alero.getSettings();
   profiles = Array.isArray(settings.profiles) ? settings.profiles : [];
+  shortcuts = { ...(settings.shortcuts || {}) };
 
   window.alero.onData((id, data) => {
     const tab = tabs.get(id);
@@ -547,7 +840,9 @@ async function init() {
   el.closeSettings.addEventListener('click', closeSettings);
   el.addProfile.addEventListener('click', addDraftProfile);
   el.restoreProfiles.addEventListener('click', restoreDefaults);
-  el.saveProfiles.addEventListener('click', saveProfiles);
+  el.saveProfiles.addEventListener('click', saveAll);
+  el.tabProfiles.addEventListener('click', () => setSettingsTab('profiles'));
+  el.tabShortcuts.addEventListener('click', () => setSettingsTab('shortcuts'));
 
   // Con la barra plegada, un clic en cualquier punto (salvo los botones) la abre.
   el.bar.addEventListener('click', (e) => {

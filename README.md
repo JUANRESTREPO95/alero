@@ -25,11 +25,21 @@ imitación: puedes correr Claude Code, PowerShell, cmd, `ssh` o lo que quieras.
 | `Ctrl+Alt+Espacio` | Mostrar / plegar |
 | `Ctrl+Alt+T` | Nueva pestaña (abre el menú) |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Cambiar de pestaña |
+| `Ctrl+Shift+W` | Cerrar la pestaña actual (mata su sesión) |
 | `Esc` | Plegar |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copiar / pegar en la terminal |
 
 También: clic en la barra para desplegar, `+` para elegir perfil y `⚙` para
-editar los perfiles.
+editar perfiles y atajos.
+
+## Atajos configurables
+
+En `⚙ → Atajos` se pulsa la combinación y se graba con el teclado (`Esc`
+cancela). Los dos primeros son **globales** (Windows los registra y funcionan
+con cualquier app); el resto solo con Alero enfocado.
+
+Si Windows no deja registrar una combinación (otra app la tiene), se avisa en
+pantalla y **se mantiene la anterior**: nunca te quedas sin atajo.
 
 Las terminales siguen corriendo aunque pliegues la barra.
 
@@ -72,6 +82,17 @@ npm start
 Para abrirlo sin consola, crea un acceso directo a
 `node_modules\electron\dist\electron.exe` con el argumento `"C:\ruta\a\Alero"`
 y el directorio de trabajo en esa misma carpeta.
+
+## Interfaz
+
+Dirección visual **data-terminal**: cromo oscuro neutro, el trabajo un paso más
+oscuro que el suelo, y una sola línea de acento de 1 px —el alero— como única
+marca de selección (pestaña activa, foco). El color de cada perfil es lo único
+que aporta color a la barra, porque identifica al perfil.
+
+- Texto en **Public Sans** y terminal en **JetBrains Mono**, ambas incluidas en
+  `src/renderer/fonts/` (SIL OFL), así que no hay peticiones externas.
+- Radios: 8 paneles, 6 controles, píldora en los botones.
 
 ## Ajustes
 

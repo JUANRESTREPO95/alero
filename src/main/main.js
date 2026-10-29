@@ -10,13 +10,13 @@ const {
 const settings = require('./settings');
 const pty = require('./pty');
 
-const COLLAPSED = { width: 360, height: 36 };
-const TOGGLE_ACCELERATOR = 'Control+Alt+Space';
-const NEW_TAB_ACCELERATOR = 'Control+Alt+T';
+const COLLAPSED = { width: 360, height: 40 };
 
 let win = null;
 let tray = null;
 let expanded = false;
+/** Atajos globales registrados en este momento (para poder cambiarlos). */
+let registered = { toggle: null, newTab: null };
 
 // ── Geometría ────────────────────────────────────────────────────────────────
 
@@ -90,22 +90,73 @@ function toggle() {
   setExpanded(!expanded, { focus: !expanded });
 }
 
+// ── Atajos globales ──────────────────────────────────────────────────────────
+
+function newTab() {
+  setExpanded(true, { focus: true });
+  if (win && !win.isDestroyed()) win.webContents.send('alero:new-tab');
+}
+
+function handlers() {
+  return { toggle, newTab };
+}
+
+/**
+ * Registra los atajos globales. Si uno nuevo no se puede registrar (otra app lo
+ * tiene), se deja el anterior en su sitio y se informa en el resultado.
+ */
+function applyShortcuts(map) {
+  const ok = {};
+
+  for (const name of settings.GLOBAL_SHORTCUTS) {
+    const next = String(map?.[name] || '').trim();
+    const previous = registered[name];
+
+    if (!next) {
+      ok[name] = false;
+      continue;
+    }
+    if (previous === next) {
+      ok[name] = true;
+      continue;
+    }
+
+    let success = false;
+    try {
+      success = globalShortcut.register(next, handlers()[name]);
+    } catch {
+      success = false;
+    }
+
+    if (success) {
+      if (previous) globalShortcut.unregister(previous);
+      registered[name] = next;
+      ok[name] = true;
+    } else {
+      // El anterior sigue registrado: se mantiene para no quedarse sin atajo.
+      ok[name] = false;
+      map[name] = previous || '';
+    }
+  }
+
+  return ok;
+}
+
 // ── Bandeja del sistema ──────────────────────────────────────────────────────
 
-function createTray() {
-  const iconPath = path.join(__dirname, '..', '..', 'assets', 'icon.png');
-  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
-  tray = new Tray(icon);
-  tray.setToolTip('Alero');
-
+function buildTrayMenu() {
+  if (!tray) return;
+  const current = settings.load().shortcuts || {};
   const menu = Menu.buildFromTemplate([
-    { label: 'Mostrar / ocultar', accelerator: TOGGLE_ACCELERATOR, click: toggle },
+    {
+      label: 'Mostrar / ocultar',
+      accelerator: registered.toggle || current.toggle || undefined,
+      click: toggle,
+    },
     {
       label: 'Nueva pestaña',
-      click: () => {
-        setExpanded(true, { focus: true });
-        win.webContents.send('alero:new-tab');
-      },
+      accelerator: registered.newTab || current.newTab || undefined,
+      click: newTab,
     },
     { type: 'separator' },
     {
@@ -121,6 +172,14 @@ function createTray() {
     { label: 'Salir', click: () => { app.isQuitting = true; app.quit(); } },
   ]);
   tray.setContextMenu(menu);
+}
+
+function createTray() {
+  const iconPath = path.join(__dirname, '..', '..', 'assets', 'icon.png');
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
+  tray.setToolTip('Alero');
+  buildTrayMenu();
   tray.on('click', toggle);
 }
 
@@ -151,6 +210,16 @@ function wireIpc() {
   ipcMain.handle('alero:profile-defaults', () =>
     settings.DEFAULT_PROFILES.map((p) => ({ ...p })));
 
+  // Cambiar los atajos globales: se intenta primero el nuevo; si falla, el
+  // anterior sigue ocupando su sitio y se devuelve el mapa realmente vigente.
+  ipcMain.handle('alero:shortcuts:apply', (_e, map) => {
+    const wanted = { ...(settings.load().shortcuts || {}), ...(map || {}) };
+    const ok = applyShortcuts(wanted);
+    const shortcuts = settings.save({ shortcuts: wanted }).shortcuts;
+    buildTrayMenu();
+    return { ok, shortcuts };
+  });
+
   ipcMain.handle('alero:clipboard:read', () => clipboard.readText());
   ipcMain.handle('alero:clipboard:write', (_e, text) => clipboard.writeText(String(text ?? '')));
 }
@@ -167,18 +236,15 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
-    settings.load();
+    const s = settings.load();
     wireIpc();
     createWindow();
     createTray();
 
-    globalShortcut.register(TOGGLE_ACCELERATOR, toggle);
-    globalShortcut.register(NEW_TAB_ACCELERATOR, () => {
-      setExpanded(true, { focus: true });
-      if (win && !win.isDestroyed()) win.webContents.send('alero:new-tab');
-    });
+    applyShortcuts({ ...s.shortcuts });
+    buildTrayMenu();
 
-    if (process.argv.includes('--hidden')) setExpanded(settings.load().expanded, { focus: false });
+    if (process.argv.includes('--hidden')) setExpanded(s.expanded, { focus: false });
   });
 
   app.on('will-quit', () => {

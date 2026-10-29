@@ -14,11 +14,23 @@ const DEFAULT_PROFILES = [
     shell: 'powershell',
     cwd: '',
     command: 'ollama launch claude --model deepseek-v4.1-flash:1017-cloud',
-    color: '#d97757',
+    color: '#c2703f',
   },
-  { id: 'powershell', label: 'PowerShell', shell: 'powershell', cwd: '', command: '', color: '#4f8cff' },
-  { id: 'cmd', label: 'cmd', shell: 'cmd', cwd: '', command: '', color: '#9aa4b2' },
+  { id: 'powershell', label: 'PowerShell', shell: 'powershell', cwd: '', command: '', color: '#6f9fd8' },
+  { id: 'cmd', label: 'cmd', shell: 'cmd', cwd: '', command: '', color: '#8a8c92' },
 ];
+
+// Atajos en sintaxis de Electron. Los dos primeros son globales (Windows los
+// registra); el resto se atiende dentro de la ventana.
+const DEFAULT_SHORTCUTS = {
+  toggle: 'Control+Alt+Space',
+  newTab: 'Control+Alt+T',
+  closeTab: 'Control+Shift+W',
+  nextTab: 'Control+Tab',
+  prevTab: 'Control+Shift+Tab',
+  copy: 'Control+Shift+C',
+  paste: 'Control+Shift+V',
+};
 
 const DEFAULTS = {
   expanded: false,
@@ -28,8 +40,12 @@ const DEFAULTS = {
   focusOnOpen: true,
   autostart: false,
   profiles: DEFAULT_PROFILES,
+  shortcuts: DEFAULT_SHORTCUTS,
   tabs: [{ profile: 'claude', label: 'Claude Code' }],
 };
+
+/** Atajos que registra Windows (el resto los atiende la interfaz). */
+const GLOBAL_SHORTCUTS = ['toggle', 'newTab'];
 
 let current = null;
 
@@ -44,6 +60,9 @@ function migrate(loaded) {
   if (!Array.isArray(next.profiles) || next.profiles.length === 0) {
     next.profiles = DEFAULT_PROFILES.map((p) => ({ ...p }));
   }
+
+  // Atajos que falten en un settings.json viejo se completan con el defecto.
+  next.shortcuts = { ...DEFAULT_SHORTCUTS, ...(next.shortcuts || {}) };
 
   // Pestañas antiguas: { type, title } → { profile, label }.
   if (Array.isArray(next.tabs)) {
@@ -81,4 +100,4 @@ function save(patch) {
   return current;
 }
 
-module.exports = { load, save, DEFAULTS, DEFAULT_PROFILES };
+module.exports = { load, save, DEFAULTS, DEFAULT_PROFILES, DEFAULT_SHORTCUTS, GLOBAL_SHORTCUTS };

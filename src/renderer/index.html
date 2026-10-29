@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';" />
   <title>Alero</title>
   <link rel="stylesheet" href="vendor/xterm.css" />
   <link rel="stylesheet" href="styles.css" />
@@ -11,17 +11,29 @@
 <body>
   <div id="shell" class="collapsed">
     <header id="bar">
-      <div class="brand" title="Alero">
-        <span class="dot"></span>
-        <span class="brand-name">Alero</span>
-      </div>
+      <h1 class="brand">
+        <svg class="mark" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M1 6.5h14M3.5 6.5 8 11.5l4.5-5" />
+        </svg>
+        <span>Alero</span>
+      </h1>
 
       <nav id="tabs" aria-label="Pestañas"></nav>
 
       <div class="actions">
-        <button id="newTab" class="icon" title="Nueva pestaña (Ctrl+Alt+T)">+</button>
-        <button id="settingsBtn" class="icon" title="Ajustes">⚙</button>
-        <button id="collapse" class="icon" title="Plegar (Esc)">–</button>
+        <button id="newTab" class="icon" title="Nueva pestaña (Ctrl+Alt+T)" aria-label="Nueva pestaña">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>
+        </button>
+        <button id="settingsBtn" class="icon" title="Ajustes" aria-label="Ajustes">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M2 4.5h12M2 11.5h12" />
+            <circle cx="6" cy="4.5" r="1.6" />
+            <circle cx="10" cy="11.5" r="1.6" />
+          </svg>
+        </button>
+        <button id="collapse" class="icon" title="Plegar (Esc)" aria-label="Plegar">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4" /></svg>
+        </button>
       </div>
 
       <div id="menu" class="menu hidden"></div>
@@ -30,25 +42,41 @@
     <main id="terminals"></main>
 
     <section id="settings" class="settings hidden" aria-label="Ajustes">
-      <div class="settings-head">
-        <h2>Perfiles de terminal</h2>
-        <button id="closeSettings" class="icon" title="Cerrar ajustes">×</button>
-      </div>
+      <aside class="settings-side">
+        <div class="settings-side-head">
+          <h2 id="settingsTitle">Perfiles de terminal</h2>
+          <button id="closeSettings" class="icon" title="Cerrar ajustes" aria-label="Cerrar ajustes">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          </button>
+        </div>
+        <p class="hint" id="settingsHint">
+          Cada perfil es una entrada del menú <strong>+</strong>. La carpeta es
+          donde arranca la terminal; el comando se escribe en la shell elegida.
+        </p>
+        <div class="settings-actions" id="profileActions">
+          <button id="addProfile">Añadir perfil</button>
+          <button id="restoreProfiles">Restaurar por defecto</button>
+        </div>
+      </aside>
 
-      <p class="hint">
-        Cada perfil es una entrada del menú <strong>+</strong>. <strong>Carpeta</strong>
-        es dónde arranca la terminal (vacío = tu carpeta de usuario). El
-        <strong>comando</strong> se escribe en la shell elegida al abrir la pestaña
-        (déjalo vacío para una shell limpia).
-      </p>
+      <div class="settings-main">
+        <nav class="settings-tabs" role="tablist" aria-label="Secciones de ajustes">
+          <button id="tabProfiles" class="settings-tab active" role="tab">Perfiles</button>
+          <button id="tabShortcuts" class="settings-tab" role="tab">Atajos</button>
+        </nav>
 
-      <div id="profileList" class="profile-list"></div>
+        <div id="profilesPane" class="pane">
+          <div id="profileList" class="profile-list"></div>
+        </div>
 
-      <div class="settings-actions">
-        <button id="addProfile">+ Añadir perfil</button>
-        <button id="restoreProfiles">Restaurar por defecto</button>
-        <span class="spacer"></span>
-        <button id="saveProfiles" class="primary">Guardar</button>
+        <div id="shortcutsPane" class="pane hidden">
+          <div id="shortcutList" class="shortcut-list"></div>
+        </div>
+
+        <div class="settings-foot">
+          <span id="settingsMessage" class="settings-message" role="status"></span>
+          <button id="saveProfiles" class="primary">Guardar</button>
+        </div>
       </div>
     </section>
   </div>
