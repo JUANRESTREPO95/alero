@@ -160,6 +160,12 @@ function setExpanded(on, { focus = false, then = null } = {}) {
   const barOnly = { ...target, height: COLLAPSED.height };
   peeking = false;
   clearTimeout(peekTimer);
+  peekTimer = null;
+
+  // Abrir la barra a mano es haber visto el aviso: se retira, salvo que sea un
+  // permiso esperando decisión (el hook sigue esperando y hay que poder pulsar).
+  if (on && pendingDecisions.size === 0) clearAlert();
+
   expanded = Boolean(on);
   settings.save({ expanded });
   animating = true;
