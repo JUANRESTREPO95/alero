@@ -460,14 +460,6 @@ html, body {
 
 
 
-/* Estado vacío */
-.empty {
-  border: 1px dashed var(--control);
-  border-radius: var(--radius-card);
-  color: var(--muted);
-  font-size: var(--fs-small);
-  padding: 12px;
-}
 
 /* Ventana estrecha (solo revisión en navegador; la app real es de 900 px) */
 @media (max-width: 720px) {
@@ -527,7 +519,7 @@ html, body {
 }
 .settings-tab:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
-.pane { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.pane { display: flex; flex-direction: column; min-height: 0; overflow: hidden; flex: 1 1 auto; position: relative; }
 .pane.hidden { display: none; }
 
 .shortcut-list {
@@ -594,3 +586,124 @@ html, body {
 }
 .profile-list::-webkit-scrollbar-thumb:hover,
 .shortcut-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* Plegada: solo la marca. */
+#shell.collapsed #tabs,
+#shell.collapsed .actions { display: none; }
+#shell.collapsed #bar { justify-content: center; padding: 0; }
+#shell.collapsed .brand { font-size: 12px; }
+
+/* ── Logos de perfil y marca de agua ───────────────────────────────────────── */
+
+.brand-mark { display: grid; place-items: center; }
+.brand-mark svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linecap: square;
+}
+.brand-logo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  border-radius: 4px;
+  display: block;
+}
+#shell:not(.collapsed) .brand-logo { width: 20px; height: 20px; }
+
+.pane { position: relative; }
+
+
+.profile-list { position: relative; z-index: 1; }
+
+/* Selector de logo del perfil */
+.logo-slot {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+}
+.logo-pick {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--control);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.logo-slot.has-logo .logo-pick { border-style: solid; border-color: var(--border); }
+.logo-pick:hover { border-color: var(--muted); color: var(--text); }
+.logo-pick img { width: 20px; height: 20px; object-fit: contain; }
+
+.logo-clear {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.logo-clear:hover { color: var(--text); border-color: var(--muted); }
+
+/* Estado vacío: la marca como fondo, con la nota legible debajo. */
+.pane-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 24px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 0;
+}
+.pane-empty svg {
+  width: 88px;
+  height: 88px;
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.1;
+  stroke-linecap: square;
+  opacity: .07;
+}
+.pane-empty-name {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  color: var(--text);
+  opacity: .07;
+}
+.pane-empty-note {
+  margin: 10px 0 0;
+  max-width: 260px;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+/* La marca de agua se oculta con .hidden, por encima de su display:flex. */
+.pane-empty.hidden { display: none; }
+
+/* Reglas explícitas: .hidden debe ganar a los display de la marca. */
+.brand-mark.hidden,
+.brand-name.hidden,
+.brand-logo.hidden { display: none; }

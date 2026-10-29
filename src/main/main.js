@@ -1,16 +1,17 @@
 // Alero — barra superior con pestañas de terminal.
 // Proceso principal: ventana, atajos globales, bandeja y puente con los PTY.
 
+const fs = require('fs');
 const path = require('path');
 const {
   app, BrowserWindow, screen, globalShortcut, ipcMain,
-  Tray, Menu, nativeImage, clipboard,
+  Tray, Menu, nativeImage, clipboard, dialog,
 } = require('electron');
 
 const settings = require('./settings');
 const pty = require('./pty');
 
-const COLLAPSED = { width: 360, height: 40 };
+const COLLAPSED = { width: 128, height: 40 };
 
 let win = null;
 let tray = null;
@@ -72,18 +73,81 @@ function createWindow() {
 
   win.once('ready-to-show', () => {
     win.showInactive();
-    win.webContents.send('alero:state', { expanded });
+    win.webContents.send('alero:state', { expanded, animating: false });
     if (expanded && s.focusOnOpen) win.focus();
   });
 }
 
-function setExpanded(on, { focus = false } = {}) {
+/**
+ * Lleva la ventana de sus límites actuales a `target` en `duration` ms, con
+ * desaceleración. Se usa para la animación de abrir y plegar.
+ */
+function animateTo(target, duration, done) {
   if (!win || win.isDestroyed()) return;
+  const start = win.getBounds();
+  const t0 = Date.now();
+
+  const step = () => {
+    if (!win || win.isDestroyed()) return;
+    const k = Math.min(1, (Date.now() - t0) / duration);
+    const ease = 1 - Math.pow(1 - k, 3);
+    win.setBounds({
+      x: Math.round(start.x + (target.x - start.x) * ease),
+      y: Math.round(start.y + (target.y - start.y) * ease),
+      width: Math.round(start.width + (target.width - start.width) * ease),
+      height: Math.round(start.height + (target.height - start.height) * ease),
+    });
+    if (k < 1) setTimeout(step, 16);
+    else if (done) done();
+  };
+
+  step();
+}
+
+let animating = false;
+
+function setExpanded(on, { focus = false, then = null } = {}) {
+  if (!win || win.isDestroyed()) return;
+  if (animating) return;
+  if (on === expanded) {
+    if (on && focus) win.focus();
+    if (then) then();
+    return;
+  }
+
+  const target = boundsFor(on);
+  const barOnly = { ...target, height: COLLAPSED.height };
   expanded = Boolean(on);
-  win.setBounds(boundsFor(expanded));
-  win.webContents.send('alero:state', { expanded });
   settings.save({ expanded });
-  if (expanded && focus) win.focus();
+  animating = true;
+
+  if (on) {
+    if (focus) win.focus();
+    // 1) la barra se estira a lo ancho (con las pestañas ya visibles)
+    win.webContents.send('alero:state', { expanded: true, animating: true });
+    animateTo(barOnly, 150, () => {
+      // 2) el panel baja
+      animateTo(target, 180, () => {
+        animating = false;
+        // Aviso final: la terminal se reajusta al tamaño definitivo.
+        win.webContents.send('alero:state', { expanded: true, animating: false });
+        if (focus) win.focus();
+        if (then) then();
+      });
+    });
+  } else {
+    // 1) el panel sube (la barra sigue completa)
+    win.webContents.send('alero:state', { expanded: true, animating: true });
+    animateTo(barOnly, 150, () => {
+      // 2) la barra se encoge y queda solo la marca
+      win.webContents.send('alero:state', { expanded: false, animating: true });
+      animateTo(target, 140, () => {
+        animating = false;
+        win.webContents.send('alero:state', { expanded: false, animating: false });
+        if (then) then();
+      });
+    });
+  }
 }
 
 function toggle() {
@@ -93,8 +157,12 @@ function toggle() {
 // ── Atajos globales ──────────────────────────────────────────────────────────
 
 function newTab() {
-  setExpanded(true, { focus: true });
-  if (win && !win.isDestroyed()) win.webContents.send('alero:new-tab');
+  setExpanded(true, {
+    focus: true,
+    then: () => {
+      if (win && !win.isDestroyed()) win.webContents.send('alero:new-tab');
+    },
+  });
 }
 
 function handlers() {
@@ -183,6 +251,71 @@ function createTray() {
   tray.on('click', toggle);
 }
 
+// ── Logos de perfil ──────────────────────────────────────────────────────────
+
+const LOGO_TYPES = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+};
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+
+function logosDir() {
+  const dir = path.join(app.getPath('userData'), 'logos');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** Ruta absoluta de un logo guardado; nunca sale de la carpeta de logos. */
+function logoFile(rel) {
+  return path.join(logosDir(), path.basename(String(rel || '')));
+}
+
+/** El logo como data URL, para que la interfaz no necesite acceso a archivos. */
+function logoDataUrl(rel) {
+  try {
+    const file = logoFile(rel);
+    const mime = LOGO_TYPES[path.extname(file).toLowerCase()];
+    if (!mime) return '';
+    return `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`;
+  } catch {
+    return '';
+  }
+}
+
+async function pickLogo() {
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Elegir logo del perfil',
+    properties: ['openFile'],
+    filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'webp', 'svg', 'ico'] }],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+
+  const source = result.filePaths[0];
+  const ext = path.extname(source).toLowerCase();
+  if (!LOGO_TYPES[ext]) return { error: 'Formato no admitido.' };
+
+  try {
+    if (fs.statSync(source).size > MAX_LOGO_BYTES) {
+      return { error: 'La imagen supera los 2 MB.' };
+    }
+  } catch {
+    return { error: 'No se pudo leer la imagen.' };
+  }
+
+  const name = `logo-${Date.now().toString(36)}${ext}`;
+  try {
+    fs.copyFileSync(source, path.join(logosDir(), name));
+  } catch {
+    return { error: 'No se pudo copiar la imagen.' };
+  }
+
+  return { path: `logos/${name}`, dataUrl: logoDataUrl(name) };
+}
+
 // ── IPC ──────────────────────────────────────────────────────────────────────
 
 function wireIpc() {
@@ -219,6 +352,9 @@ function wireIpc() {
     buildTrayMenu();
     return { ok, shortcuts };
   });
+
+  ipcMain.handle('alero:logo:pick', () => pickLogo());
+  ipcMain.handle('alero:logo:data', (_e, rel) => logoDataUrl(rel));
 
   ipcMain.handle('alero:clipboard:read', () => clipboard.readText());
   ipcMain.handle('alero:clipboard:write', (_e, text) => clipboard.writeText(String(text ?? '')));

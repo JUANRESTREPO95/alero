@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('alero', {
   saveSettings: (patch) => ipcRenderer.invoke('alero:settings:set', patch),
   defaultProfiles: () => ipcRenderer.invoke('alero:profile-defaults'),
   applyShortcuts: (map) => ipcRenderer.invoke('alero:shortcuts:apply', map),
+  pickLogo: () => ipcRenderer.invoke('alero:logo:pick'),
+  logoData: (rel) => ipcRenderer.invoke('alero:logo:data', rel),
   readClipboard: () => ipcRenderer.invoke('alero:clipboard:read'),
   writeClipboard: (text) => ipcRenderer.invoke('alero:clipboard:write', text),
 

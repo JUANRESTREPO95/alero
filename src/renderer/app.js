@@ -25,6 +25,12 @@ const el = {
   settingsHint: document.getElementById('settingsHint'),
   profileActions: document.getElementById('profileActions'),
   settingsTitle: document.getElementById('settingsTitle'),
+  brandMark: document.getElementById('brandMark'),
+  brandName: document.getElementById('brandName'),
+  brandLogo: document.getElementById('brandLogo'),
+  watermark: document.getElementById('profilesWatermark'),
+  terminalsEmpty: document.getElementById('terminalsEmpty'),
+  newTabHint: document.getElementById('newTabHint'),
 };
 
 // La terminal usa el mismo suelo que el resto: superficie del sheet, tinta
@@ -50,7 +56,13 @@ let profiles = [];
 let shortcuts = {};
 let draftShortcuts = {};
 let recording = null;
+/** logo (ruta relativa) → data URL, para no depender de rutas en la interfaz. */
+const logoCache = new Map();
 let expanded = false;
+let animating = false;
+// xterm mide la celda con la fuente de la terminal; hasta que no está lista, el
+// ajuste daría columnas de más. Se espera, con un tope por si nunca carga.
+let fontsReady = false;
 
 // ── Pestañas ─────────────────────────────────────────────────────────────────
 
@@ -70,7 +82,7 @@ function newTerm() {
 }
 
 function fitTab(tab) {
-  if (!expanded) return;
+  if (!expanded || animating || !fontsReady) return;
   try {
     tab.fit.fit();
   } catch {
@@ -139,10 +151,67 @@ async function addTab(profileId, { select = true } = {}) {
   term.onResize(({ cols: c, rows: r }) => window.alero.resize(id, c, r));
 
   if (select) activate(id);
-  else renderTabs();
+  else { renderTabs(); refreshChrome(); }
 
   saveTabs();
   return tab;
+}
+
+function profileOf(tab) {
+  return tab ? profiles.find((p) => p.id === tab.profile) || null : null;
+}
+
+async function ensureLogo(profile) {
+  if (!profile?.logo || logoCache.has(profile.logo)) return;
+  const data = await window.alero.logoData(profile.logo);
+  if (data) logoCache.set(profile.logo, data);
+}
+
+function renderBrand() {
+  // El logo del perfil solo sustituye a la marca con la barra abierta y una
+  // pestaña activa. Sin pestañas y abierta, la barra no repite «Alero»: ya lo
+  // dice el estado vacío del panel.
+  const noTabs = tabs.size === 0;
+  const hideBrand = expanded && noTabs;
+  const profile = expanded && !noTabs ? profileOf(tabs.get(activeId)) : null;
+  const data = profile?.logo ? logoCache.get(profile.logo) : '';
+  const hasLogo = !hideBrand && Boolean(data);
+
+  el.brandLogo.classList.toggle('hidden', !hasLogo);
+  if (hasLogo) {
+    el.brandLogo.src = data;
+    el.brandLogo.alt = profile.label;
+  }
+
+  const showWordmark = !hasLogo && !hideBrand;
+  el.brandMark.classList.toggle('hidden', !showWordmark);
+  el.brandName.classList.toggle('hidden', !showWordmark);
+}
+
+/**
+ * Repinta lo que depende del estado: la marca de la barra y el estado vacío
+ * (sin pestañas, o con Ajustes abiertos).
+ */
+function refreshChrome() {
+  renderBrand();
+  const showEmpty = expanded && tabs.size === 0 && !isSettingsOpen();
+  el.terminalsEmpty.classList.toggle('hidden', !showEmpty);
+}
+
+/** El atajo de nueva pestaña, escrito donde la interfaz lo menciona. */
+function refreshShortcutLabels() {
+  // Compacto para que encaje en una frase: Ctrl+Alt+T, no Ctrl + Alt + T.
+  const label = (friendly(shortcuts.newTab) || 'Ctrl+Alt+T').split(' + ').join('+');
+  if (el.newTabHint) el.newTabHint.textContent = label;
+  el.newTab.title = `Nueva pestaña (${label})`;
+  el.newTab.setAttribute('aria-label', `Nueva pestaña (${label})`);
+}
+
+/** Carga los logos que falten y repinta la barra y el menú. */
+async function loadLogos() {
+  await Promise.all(profiles.map((p) => ensureLogo(p)));
+  renderBrand();
+  renderMenu();
 }
 
 function activate(id) {
@@ -152,6 +221,7 @@ function activate(id) {
     tab.holder.classList.toggle('active', key === id);
   }
   renderTabs();
+  refreshChrome();
   const tab = tabs.get(id);
   fitTab(tab);
   if (expanded && !isSettingsOpen()) tab.term.focus();
@@ -171,6 +241,7 @@ function closeTab(id) {
     if (!next.done) activate(next.value);
   }
   renderTabs();
+  refreshChrome();
   saveTabs();
 }
 
@@ -479,10 +550,12 @@ function openSettings() {
   el.settingsMessage.textContent = '';
   setSettingsTab('profiles');
   el.settings.classList.remove('hidden');
+  refreshChrome();
 }
 
 function closeSettings() {
   el.settings.classList.add('hidden');
+  refreshChrome();
   const tab = tabs.get(activeId);
   if (tab && expanded) tab.term.focus();
 }
@@ -496,6 +569,21 @@ function field(labelText, control, wide = false) {
   return wrap;
 }
 
+async function pickLogoFor(index) {
+  const picked = await window.alero.pickLogo();
+  if (!picked) return;
+  if (picked.error) {
+    el.settingsMessage.textContent = picked.error;
+    return;
+  }
+
+  draft = readEditor();
+  draft[index].logo = picked.path;
+  logoCache.set(picked.path, picked.dataUrl);
+  el.settingsMessage.textContent = '';
+  renderProfileEditor();
+}
+
 function renderProfileEditor() {
   el.profileList.textContent = '';
 
@@ -503,6 +591,7 @@ function renderProfileEditor() {
     const card = document.createElement('div');
     card.className = 'profile-card';
     card.dataset.id = profile.id;
+    card.dataset.logo = profile.logo || '';
 
     const head = document.createElement('div');
     head.className = 'card-head';
@@ -530,7 +619,42 @@ function renderProfileEditor() {
       renderProfileEditor();
     });
 
-    head.append(color, label, remove);
+    const slot = document.createElement('div');
+    slot.className = 'logo-slot' + (profile.logo ? ' has-logo' : '');
+
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'logo-pick';
+    pick.title = profile.logo ? 'Cambiar logo' : 'Elegir logo';
+    pick.setAttribute('aria-label', pick.title);
+    const data = profile.logo ? logoCache.get(profile.logo) : '';
+    if (data) {
+      const img = document.createElement('img');
+      img.src = data;
+      img.alt = '';
+      pick.appendChild(img);
+    } else {
+      pick.textContent = '+';
+    }
+    pick.addEventListener('click', () => pickLogoFor(index));
+    slot.appendChild(pick);
+
+    if (profile.logo) {
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'logo-clear';
+      clear.textContent = '×';
+      clear.title = 'Quitar logo';
+      clear.setAttribute('aria-label', 'Quitar logo');
+      clear.addEventListener('click', () => {
+        draft = readEditor();
+        draft[index].logo = '';
+        renderProfileEditor();
+      });
+      slot.appendChild(clear);
+    }
+
+    head.append(slot, color, label, remove);
 
     const shell = document.createElement('select');
     shell.className = 'shell';
@@ -566,12 +690,8 @@ function renderProfileEditor() {
     el.profileList.appendChild(card);
   });
 
-  if (!draft.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = 'No hay perfiles. Añade uno para poder abrir pestañas.';
-    el.profileList.appendChild(empty);
-  }
+  el.watermark.classList.toggle('hidden', draft.length > 0);
+
 }
 
 function readEditor() {
@@ -582,6 +702,7 @@ function readEditor() {
     shell: row.querySelector('.shell').value,
     cwd: row.querySelector('.cwd').value.trim(),
     command: row.querySelector('.command').value.trim(),
+    logo: row.dataset.logo || '',
     color: row.querySelector('.color').value,
   }));
 }
@@ -627,6 +748,7 @@ function readProfiles() {
       cwd: p.cwd || '',
       command: p.command,
       color: p.color || '#c2703f',
+      logo: p.logo || '',
     };
   });
 }
@@ -644,6 +766,7 @@ async function saveAll() {
   shortcuts = applied.shortcuts || shortcuts;
   draftShortcuts = { ...shortcuts };
   renderShortcuts();
+  refreshShortcutLabels();
 
   if (failed.length) {
     el.settingsMessage.textContent =
@@ -655,7 +778,7 @@ async function saveAll() {
   if (clean.length) {
     const saved = await window.alero.saveSettings({ profiles: clean, shortcuts });
     profiles = saved.profiles || clean;
-    renderMenu();
+    await loadLogos();
   }
 
   closeSettings();
@@ -669,10 +792,12 @@ async function restoreDefaults() {
 
 // ── Estado (colapsada / expandida) ───────────────────────────────────────────
 
-function applyState(next) {
-  expanded = Boolean(next);
+function applyState(state) {
+  expanded = Boolean(state.expanded);
+  animating = Boolean(state.animating);
   el.shell.classList.toggle('collapsed', !expanded);
-  if (expanded) {
+  refreshChrome();
+  if (expanded && !animating) {
     requestAnimationFrame(() => {
       for (const tab of tabs.values()) fitTab(tab);
       const tab = tabs.get(activeId) || tabs.values().next().value;
@@ -788,9 +913,17 @@ document.addEventListener('keydown', (e) => {
   }
 }, true);
 
-document.fonts?.ready.then(() => {
+const markFontsReady = () => {
+  if (fontsReady) return;
+  fontsReady = true;
   for (const tab of tabs.values()) fitTab(tab);
-});
+};
+if (document.fonts) {
+  document.fonts.ready.then(markFontsReady);
+  setTimeout(markFontsReady, 1500);
+} else {
+  markFontsReady();
+}
 
 window.addEventListener('resize', () => {
   for (const tab of tabs.values()) fitTab(tab);
@@ -808,7 +941,7 @@ async function init() {
     if (tab) tab.term.write(data);
   });
   window.alero.onExit((id) => markDead(id));
-  window.alero.onState((state) => applyState(state.expanded));
+  window.alero.onState((state) => applyState(state));
   window.alero.onNewTab(() => openMenu());
 
   el.newTab.addEventListener('click', (e) => {
@@ -858,8 +991,10 @@ async function init() {
   for (const item of saved) {
     await addTab(item.profile, { select: false });
   }
+  refreshShortcutLabels();
   if (tabs.size) activate([...tabs.keys()][0]);
-  applyState(Boolean(settings.expanded));
+  loadLogos();
+  applyState({ expanded: Boolean(settings.expanded), animating: false });
 }
 
 init();

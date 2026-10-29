@@ -15,9 +15,10 @@ const DEFAULT_PROFILES = [
     cwd: '',
     command: 'ollama launch claude --model deepseek-v4.1-flash:1017-cloud',
     color: '#c2703f',
+    logo: '',
   },
-  { id: 'powershell', label: 'PowerShell', shell: 'powershell', cwd: '', command: '', color: '#6f9fd8' },
-  { id: 'cmd', label: 'cmd', shell: 'cmd', cwd: '', command: '', color: '#8a8c92' },
+  { id: 'powershell', label: 'PowerShell', shell: 'powershell', cwd: '', command: '', color: '#6f9fd8', logo: '' },
+  { id: 'cmd', label: 'cmd', shell: 'cmd', cwd: '', command: '', color: '#8a8c92', logo: '' },
 ];
 
 // Atajos en sintaxis de Electron. Los dos primeros son globales (Windows los

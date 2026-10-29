@@ -41,7 +41,9 @@ con cualquier app); el resto solo con Alero enfocado.
 Si Windows no deja registrar una combinación (otra app la tiene), se avisa en
 pantalla y **se mantiene la anterior**: nunca te quedas sin atajo.
 
-Las terminales siguen corriendo aunque pliegues la barra.
+Plegada es solo la marca; al abrirla, la barra se estira y el panel baja con
+una animación corta (unos 330 ms). Las terminales siguen corriendo mientras
+está plegada.
 
 ## Perfiles
 
@@ -49,6 +51,7 @@ Cada entrada del menú `+` es un perfil. Se edita en `⚙`:
 
 | Campo | Qué hace |
 |---|---|
+| Logo | Imagen propia (PNG, JPG, WEBP, SVG o ICO) que se muestra en la barra |
 | Color | Punto de la pestaña y del menú |
 | Nombre | Lo que se ve en la pestaña y en el menú |
 | Shell | `PowerShell` o `cmd`: dónde se escribe el comando |
