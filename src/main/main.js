@@ -5,11 +5,13 @@ const fs = require('fs');
 const path = require('path');
 const {
   app, BrowserWindow, screen, globalShortcut, ipcMain,
-  Tray, Menu, nativeImage, clipboard, dialog,
+  Tray, Menu, nativeImage, clipboard, dialog, shell,
 } = require('electron');
 
 const settings = require('./settings');
 const pty = require('./pty');
+const alerts = require('./alerts');
+const hooks = require('./hooks');
 
 const COLLAPSED = { width: 128, height: 40 };
 
@@ -117,6 +119,8 @@ function setExpanded(on, { focus = false, then = null } = {}) {
 
   const target = boundsFor(on);
   const barOnly = { ...target, height: COLLAPSED.height };
+  peeking = false;
+  clearTimeout(peekTimer);
   expanded = Boolean(on);
   settings.save({ expanded });
   animating = true;
@@ -316,6 +320,117 @@ async function pickLogo() {
   return { path: `logos/${name}`, dataUrl: logoDataUrl(name) };
 }
 
+// ── Avisos de Claude Code ────────────────────────────────────────────────────
+
+/** Alto que se asoma por encima de la barra plegada cuando llega un aviso. */
+/** Alto del asomo: barra con la pestaña + la notificación. */
+const PEEK_HEIGHT = 112;
+/** Ancho del asomo: solo la tarjeta del aviso, no la barra entera. */
+const PEEK_WIDTH = 520;
+
+let peeking = false;
+let peekTimer = null;
+let alertSeq = 0;
+/** id de decisión → función que responde al hook. */
+const pendingDecisions = new Map();
+
+/** Caja del asomo: centrada, del ancho del aviso y con el alto del aviso. */
+function peekBounds(height) {
+  const wa = workArea();
+  const width = Math.min(PEEK_WIDTH, wa.width);
+  return {
+    x: Math.round(wa.x + (wa.width - width) / 2),
+    y: wa.y,
+    width,
+    height,
+  };
+}
+
+function alertAllowed(alert) {
+  const conf = settings.load().alerts || {};
+  if (conf.events && conf.events[alert.key] === false) return false;
+  if (alert.profile && conf.profiles && conf.profiles[alert.profile] === false) return false;
+  return true;
+}
+
+function clearAlert() {
+  if (win && !win.isDestroyed()) win.webContents.send('alero:alert:clear');
+}
+
+/** Cierra el aviso; si estaba asomado, vuelve a plegarse. */
+function dismissAlert() {
+  clearTimeout(peekTimer);
+  peekTimer = null;
+  clearAlert();
+  if (!peeking || !win || win.isDestroyed()) return;
+
+  peeking = false;
+  const target = boundsFor(false);
+  win.webContents.send('alero:state', { expanded: true, animating: true });
+  animateTo({ ...target, height: COLLAPSED.height }, 150, () => {
+    win.webContents.send('alero:state', { expanded: false, animating: true });
+    animateTo(target, 140, () => {
+      win.webContents.send('alero:state', { expanded: false, animating: false });
+    });
+  });
+}
+
+function showAlert(alert, decisionId = null) {
+  if (!win || win.isDestroyed() || !alertAllowed(alert)) return;
+
+  const conf = settings.load().alerts || {};
+  const height = PEEK_HEIGHT;
+
+  const spot = peekBounds(height);
+
+  if (!expanded && !peeking) {
+    peeking = true;
+    win.webContents.send('alero:state', { expanded: true, peek: true, animating: true });
+    animateTo(spot, 170, () => {
+      win.webContents.send('alero:state', { expanded: true, peek: true, animating: false });
+    });
+  } else if (!expanded && peeking) {
+    animateTo(spot, 120);
+  }
+
+  win.webContents.send('alero:alert', { id: ++alertSeq, ...alert, decisionId });
+  if (conf.sound) {
+    try { shell.beep(); } catch { /* sin sonido del sistema */ }
+  }
+
+  clearTimeout(peekTimer);
+  if (!decisionId) {
+    const seconds = Math.min(60, Math.max(3, Number(conf.seconds) || 8));
+    peekTimer = setTimeout(dismissAlert, seconds * 1000);
+  }
+}
+
+function startAlerts() {
+  alerts.start({
+    alert: (alert) => showAlert(alert),
+    permission: (alert, respond) => {
+      const conf = settings.load().alerts || {};
+      if (!alertAllowed(alert)) { respond('skip'); return; }
+      // Sin aprobación desde Alero, se avisa y se deja que Claude pregunte en
+      // la terminal: el hook termina enseguida con un "skip".
+      if (!conf.approve) { showAlert(alert); respond('skip'); return; }
+
+      const id = `d${++alertSeq}`;
+      pendingDecisions.set(id, respond);
+      showAlert(alert, id);
+    },
+  });
+}
+
+function decide(id, decision) {
+  const respond = pendingDecisions.get(id);
+  if (!respond) return false;
+  pendingDecisions.delete(id);
+  respond(decision);
+  dismissAlert();
+  return true;
+}
+
 // ── IPC ──────────────────────────────────────────────────────────────────────
 
 function wireIpc() {
@@ -353,6 +468,13 @@ function wireIpc() {
     return { ok, shortcuts };
   });
 
+  ipcMain.on('alero:decision', (_e, id, decision) => decide(id, decision));
+  ipcMain.on('alero:alert:dismiss', () => dismissAlert());
+
+  ipcMain.handle('alero:hooks:preview', (_e, install) => hooks.preview(Boolean(install)));
+  ipcMain.handle('alero:hooks:apply', (_e, install, fingerprint) => hooks.apply(Boolean(install), fingerprint));
+  ipcMain.handle('alero:hooks:installed', () => hooks.isInstalled());
+
   ipcMain.handle('alero:logo:pick', () => pickLogo());
   ipcMain.handle('alero:logo:data', (_e, rel) => logoDataUrl(rel));
 
@@ -379,12 +501,14 @@ if (!gotLock) {
 
     applyShortcuts({ ...s.shortcuts });
     buildTrayMenu();
+    startAlerts();
 
     if (process.argv.includes('--hidden')) setExpanded(s.expanded, { focus: false });
   });
 
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
+    alerts.stop();
     pty.killAll();
   });
 }

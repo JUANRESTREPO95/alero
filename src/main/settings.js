@@ -33,6 +33,22 @@ const DEFAULT_SHORTCUTS = {
   paste: 'Control+Shift+V',
 };
 
+// Plegado automático: las dos reglas son independientes y se pueden combinar.
+const DEFAULT_COLLAPSE = {
+  onBlur: false,      // al pasar a otra ventana (Alt+Tab)
+  idle: true,         // tras un rato sin usar la barra
+  idleSeconds: 10,    // segundos sin actividad
+};
+
+const DEFAULT_ALERTS = {
+  sound: true,
+  approve: true,
+  seconds: 8,
+  height: 150,
+  events: { stop: true, permission: true, question: true, notification: true },
+  profiles: {},
+};
+
 const DEFAULTS = {
   expanded: false,
   width: 900,
@@ -42,6 +58,8 @@ const DEFAULTS = {
   autostart: false,
   profiles: DEFAULT_PROFILES,
   shortcuts: DEFAULT_SHORTCUTS,
+  alerts: DEFAULT_ALERTS,
+  collapse: DEFAULT_COLLAPSE,
   tabs: [{ profile: 'claude', label: 'Claude Code' }],
 };
 
@@ -64,6 +82,18 @@ function migrate(loaded) {
 
   // Atajos que falten en un settings.json viejo se completan con el defecto.
   next.shortcuts = { ...DEFAULT_SHORTCUTS, ...(next.shortcuts || {}) };
+
+  // Plegado automático.
+  next.collapse = { ...DEFAULT_COLLAPSE, ...(next.collapse || {}) };
+
+  // Avisos: se mezcla por dentro para no perder los interruptores ya puestos.
+  const alerts = next.alerts || {};
+  next.alerts = {
+    ...DEFAULT_ALERTS,
+    ...alerts,
+    events: { ...DEFAULT_ALERTS.events, ...(alerts.events || {}) },
+    profiles: { ...(alerts.profiles || {}) },
+  };
 
   // Pestañas antiguas: { type, title } → { profile, label }.
   if (Array.isArray(next.tabs)) {

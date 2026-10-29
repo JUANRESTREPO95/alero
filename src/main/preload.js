@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('alero', {
   defaultProfiles: () => ipcRenderer.invoke('alero:profile-defaults'),
   applyShortcuts: (map) => ipcRenderer.invoke('alero:shortcuts:apply', map),
   pickLogo: () => ipcRenderer.invoke('alero:logo:pick'),
+  decide: (id, decision) => ipcRenderer.send('alero:decision', id, decision),
+  dismissAlert: () => ipcRenderer.send('alero:alert:dismiss'),
+  hooksPreview: (install) => ipcRenderer.invoke('alero:hooks:preview', install),
+  hooksApply: (install, fingerprint) => ipcRenderer.invoke('alero:hooks:apply', install, fingerprint),
+  hooksInstalled: () => ipcRenderer.invoke('alero:hooks:installed'),
   logoData: (rel) => ipcRenderer.invoke('alero:logo:data', rel),
   readClipboard: () => ipcRenderer.invoke('alero:clipboard:read'),
   writeClipboard: (text) => ipcRenderer.invoke('alero:clipboard:write', text),
@@ -26,4 +31,6 @@ contextBridge.exposeInMainWorld('alero', {
   onExit: (cb) => ipcRenderer.on('alero:pty:exit', (_e, id, exit) => cb(id, exit)),
   onState: (cb) => ipcRenderer.on('alero:state', (_e, state) => cb(state)),
   onNewTab: (cb) => ipcRenderer.on('alero:new-tab', () => cb()),
+  onAlert: (cb) => ipcRenderer.on('alero:alert', (_e, alert) => cb(alert)),
+  onAlertClear: (cb) => ipcRenderer.on('alero:alert:clear', () => cb()),
 });

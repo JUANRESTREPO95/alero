@@ -31,6 +31,31 @@ const el = {
   watermark: document.getElementById('profilesWatermark'),
   terminalsEmpty: document.getElementById('terminalsEmpty'),
   newTabHint: document.getElementById('newTabHint'),
+
+  alert: document.getElementById('alert'),
+  alertTitle: document.getElementById('alertTitle'),
+  alertBody: document.getElementById('alertBody'),
+  alertActions: document.getElementById('alertActions'),
+  alertAvatar: document.getElementById('alertAvatar'),
+
+  tabAlerts: document.getElementById('tabAlerts'),
+  alertsPane: document.getElementById('alertsPane'),
+  hooksStatus: document.getElementById('hooksStatus'),
+  hooksToggle: document.getElementById('hooksToggle'),
+  hooksPreview: document.getElementById('hooksPreview'),
+  hooksDiff: document.getElementById('hooksDiff'),
+  hooksNote: document.getElementById('hooksNote'),
+  hooksCancel: document.getElementById('hooksCancel'),
+  hooksConfirm: document.getElementById('hooksConfirm'),
+  alertProfiles: document.getElementById('alertProfiles'),
+  alertSound: document.getElementById('alertSound'),
+  alertApprove: document.getElementById('alertApprove'),
+  alertSeconds: document.getElementById('alertSeconds'),
+  tabBar: document.getElementById('tabBar'),
+  barPane: document.getElementById('barPane'),
+  collapseBlur: document.getElementById('collapseBlur'),
+  collapseIdle: document.getElementById('collapseIdle'),
+  collapseSeconds: document.getElementById('collapseSeconds'),
 };
 
 // La terminal usa el mismo suelo que el resto: superficie del sheet, tinta
@@ -125,6 +150,7 @@ async function addTab(profileId, { select = true } = {}) {
       shell: profile.shell,
       command: profile.command,
       cwd: profile.cwd || '',
+      profile: profile.id,
       cols,
       rows,
     });
@@ -211,6 +237,7 @@ function refreshShortcutLabels() {
 async function loadLogos() {
   await Promise.all(profiles.map((p) => ensureLogo(p)));
   renderBrand();
+  renderTabs();
   renderMenu();
 }
 
@@ -263,6 +290,16 @@ function renderTabs() {
 
     const kind = document.createElement('span');
     kind.className = 'kind';
+    const profile = profiles.find((p) => p.id === tab.profile);
+    const logo = profile?.logo ? logoCache.get(profile.logo) : '';
+    if (logo) {
+      const img = document.createElement('img');
+      img.src = logo;
+      img.alt = '';
+      img.className = 'tab-logo';
+      kind.classList.add('has-logo');
+      kind.appendChild(img);
+    }
 
     const name = document.createElement('span');
     name.className = 'name';
@@ -518,18 +555,35 @@ function onRecord(e) {
 
 function setSettingsTab(tab) {
   stopRecording();
-  el.tabProfiles.classList.toggle('active', tab === 'profiles');
-  el.tabShortcuts.classList.toggle('active', tab === 'shortcuts');
-  el.profilesPane.classList.toggle('hidden', tab !== 'profiles');
-  el.shortcutsPane.classList.toggle('hidden', tab !== 'shortcuts');
+
+  const tabs = {
+    profiles: { button: el.tabProfiles, pane: el.profilesPane, title: 'Perfiles de terminal' },
+    shortcuts: { button: el.tabShortcuts, pane: el.shortcutsPane, title: 'Atajos' },
+    alerts: { button: el.tabAlerts, pane: el.alertsPane, title: 'Avisos' },
+    bar: { button: el.tabBar, pane: el.barPane, title: 'Barra' },
+  };
+
+  for (const [name, item] of Object.entries(tabs)) {
+    item.button.classList.toggle('active', tab === name);
+    item.pane.classList.toggle('hidden', tab !== name);
+  }
   el.profileActions.classList.toggle('hidden', tab !== 'profiles');
-  el.settingsTitle.textContent = tab === 'profiles' ? 'Perfiles de terminal' : 'Atajos';
+  el.settingsTitle.textContent = (tabs[tab] || tabs.profiles).title;
+
   el.shortcutList.scrollTop = 0;
   el.profileList.scrollTop = 0;
+
   el.settingsMessage.textContent = '';
-  el.settingsHint.innerHTML = tab === 'profiles'
-    ? 'Cada perfil es una entrada del menú <strong>+</strong>. La carpeta es donde arranca la terminal; el comando se escribe en la shell elegida.'
-    : 'Pulsa un atajo y graba la combinación nueva con el teclado. <strong>Esc</strong> cancela la grabación.';
+  const hints = {
+    profiles: 'Cada perfil es una entrada del menú <strong>+</strong>. La carpeta es donde arranca la terminal; el comando se escribe en la shell elegida.',
+    shortcuts: 'Pulsa un atajo y graba la combinación nueva con el teclado. <strong>Esc</strong> cancela la grabación.',
+    alerts: 'Alero puede avisarte cuando Claude Code termina, pide permiso o te pregunta algo, aunque la barra esté plegada.',
+    bar: 'Cuándo se vuelve a plegar sola la barra. Las dos reglas son independientes y se pueden combinar.',
+  };
+  el.settingsHint.innerHTML = hints[tab] || hints.profiles;
+
+  if (tab === 'alerts') renderAlertsPane();
+  if (tab === 'bar') renderBarPane();
 }
 
 // ── Ajustes: perfiles ────────────────────────────────────────────────────────
@@ -540,11 +594,217 @@ function isSettingsOpen() {
   return !el.settings.classList.contains('hidden');
 }
 
+// ── Avisos ──────────────────────────────────────────────────────────────────
+
+let draftAlerts = null;
+let draftCollapse = null;
+let idleTimer = null;
+let pendingHooks = null;
+let currentAlert = null;
+
+function copyAlerts(source) {
+  return {
+    ...source,
+    events: { ...(source.events || {}) },
+    profiles: { ...(source.profiles || {}) },
+  };
+}
+
+function copyCollapse(source) {
+  return { onBlur: false, idle: true, idleSeconds: 10, ...(source || {}) };
+}
+
+function renderBarPane() {
+  if (!draftCollapse) draftCollapse = copyCollapse(settings.collapse);
+  el.collapseBlur.checked = draftCollapse.onBlur === true;
+  el.collapseIdle.checked = draftCollapse.idle !== false;
+  el.collapseSeconds.value = draftCollapse.idleSeconds || 10;
+}
+
+async function renderAlertsPane() {
+  if (!draftAlerts) draftAlerts = copyAlerts(settings.alerts || {});
+
+  el.alertSound.addEventListener('change', () => { if (draftAlerts) draftAlerts.sound = el.alertSound.checked; });
+  el.alertApprove.addEventListener('change', () => { if (draftAlerts) draftAlerts.approve = el.alertApprove.checked; });
+  el.alertSeconds.addEventListener('input', () => { if (draftAlerts) draftAlerts.seconds = Number(el.alertSeconds.value) || 8; });
+  el.collapseBlur.addEventListener('change', () => { if (draftCollapse) draftCollapse.onBlur = el.collapseBlur.checked; });
+  el.collapseIdle.addEventListener('change', () => { if (draftCollapse) draftCollapse.idle = el.collapseIdle.checked; });
+  el.collapseSeconds.addEventListener('input', () => { if (draftCollapse) draftCollapse.idleSeconds = Number(el.collapseSeconds.value) || 10; });
+
+  for (const input of el.alertsPane.querySelectorAll('input[data-event]')) {
+    input.checked = draftAlerts.events[input.dataset.event] !== false;
+  }
+  el.alertSound.checked = draftAlerts.sound !== false;
+  el.alertApprove.checked = draftAlerts.approve !== false;
+  el.alertSeconds.value = draftAlerts.seconds || 8;
+
+  el.alertProfiles.textContent = '';
+  if (!profiles.length) {
+    const none = document.createElement('span');
+    none.className = 'meta';
+    none.textContent = 'Sin perfiles todavía.';
+    el.alertProfiles.appendChild(none);
+  }
+  for (const profile of profiles) {
+    const label = document.createElement('label');
+    label.className = 'check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = draftAlerts.profiles[profile.id] !== false;
+    box.addEventListener('change', () => {
+      draftAlerts.profiles[profile.id] = box.checked;
+    });
+    label.append(box, document.createTextNode(` ${profile.label}`));
+    el.alertProfiles.appendChild(label);
+  }
+
+  const installed = await window.alero.hooksInstalled();
+  el.hooksStatus.textContent = installed
+    ? 'Instalados en ~/.claude/settings.json'
+    : 'No instalados';
+  el.hooksToggle.textContent = installed ? 'Quitar' : 'Instalar';
+}
+
+async function previewHooks() {
+  el.settingsMessage.textContent = '';
+  const installed = await window.alero.hooksInstalled();
+  const result = await window.alero.hooksPreview(!installed);
+
+  if (result.error) {
+    el.settingsMessage.textContent = result.error;
+    return;
+  }
+  if (result.unchanged) {
+    el.settingsMessage.textContent = 'No hay nada que cambiar.';
+    return;
+  }
+
+  pendingHooks = { install: !installed, fingerprint: result.fingerprint };
+  let block = result.after;
+  try {
+    block = JSON.stringify({ hooks: JSON.parse(result.after).hooks }, null, 2);
+  } catch {
+    // Se muestra el archivo completo si no se puede aislar el bloque.
+  }
+  el.hooksDiff.textContent = block;
+  el.hooksNote.textContent = `Se guardará un backup en ${result.settingsPath}.bak-…`;
+  el.hooksPreview.classList.remove('hidden');
+}
+
+async function applyHooks() {
+  if (!pendingHooks) return;
+  const result = await window.alero.hooksApply(pendingHooks.install, pendingHooks.fingerprint);
+  if (result.error) {
+    el.hooksNote.textContent = result.error;
+    return;
+  }
+  el.hooksPreview.classList.add('hidden');
+  pendingHooks = null;
+  await renderAlertsPane();
+  el.settingsMessage.textContent = result.backup
+    ? `Listo. Backup: ${result.backup}`
+    : 'Listo.';
+}
+
+function addAlertButton(text, primary, onClick) {
+  const button = document.createElement('button');
+  button.textContent = text;
+  if (primary) button.className = 'primary';
+  button.addEventListener('click', onClick);
+  el.alertActions.appendChild(button);
+}
+
+function showAlert(data) {
+  currentAlert = data;
+
+  // Avatar de la notificación: el logo del perfil o su punto de color.
+  const profile = data.profile ? profiles.find((p) => p.id === data.profile) : null;
+  const logo = profile?.logo ? logoCache.get(profile.logo) : '';
+  el.alertAvatar.textContent = '';
+  if (logo) {
+    const img = document.createElement('img');
+    img.src = logo;
+    img.alt = '';
+    el.alertAvatar.appendChild(img);
+  } else {
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.setProperty('--tab-color', profile?.color || 'var(--accent)');
+    el.alertAvatar.appendChild(dot);
+  }
+
+  el.alertTitle.textContent = data.title;
+  const who = profile?.label || data.folder;
+  el.alertBody.textContent = who ? `${data.body} · ${who}` : data.body;
+  el.alertActions.textContent = '';
+
+  if (data.decisionId) {
+    addAlertButton('Permitir', true, () => window.alero.decide(data.decisionId, 'allow'));
+    addAlertButton('Denegar', false, () => window.alero.decide(data.decisionId, 'deny'));
+    addAlertButton('Cerrar', false, () => window.alero.decide(data.decisionId, 'skip'));
+  } else {
+    addAlertButton('Abrir', true, () => {
+      window.alero.expand();
+      window.alero.dismissAlert();
+    });
+    addAlertButton('Cerrar', false, () => window.alero.dismissAlert());
+  }
+
+  el.alert.classList.remove('hidden');
+  el.shell.classList.add('alerting');
+  requestAnimationFrame(() => {
+    for (const tab of tabs.values()) fitTab(tab);
+  });
+}
+
+function clearAlertUi() {
+  currentAlert = null;
+  el.alert.classList.add('hidden');
+  el.shell.classList.remove('alerting');
+  noteActivity();
+  requestAnimationFrame(() => {
+    for (const tab of tabs.values()) fitTab(tab);
+  });
+}
+
+// ── Plegado automático ───────────────────────────────────────────────────────
+
+/** Nunca se pliega sola si hay algo que el usuario necesita ver o tocar. */
+function canAutoCollapse() {
+  if (!expanded || animating) return false;
+  if (isSettingsOpen() || recording) return false;
+  if (currentAlert) return false;
+  if (el.shell.classList.contains('peek')) return false;
+  return true;
+}
+
+/** Reinicia la cuenta de inactividad; llamada por cualquier uso de la barra. */
+function noteActivity() {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+  if (!expanded) return;
+
+  const conf = settings.collapse || {};
+  if (conf.idle === false) return;
+
+  const seconds = Math.min(300, Math.max(5, Number(conf.idleSeconds) || 10));
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    if (canAutoCollapse()) window.alero.collapse();
+  }, seconds * 1000);
+}
+
 function openSettings() {
   closeMenu();
   if (!expanded) window.alero.expand();
   draft = profiles.map((p) => ({ ...p }));
   draftShortcuts = { ...shortcuts };
+  draftAlerts = copyAlerts(settings.alerts || {});
+  draftCollapse = copyCollapse(settings.collapse);
+  pendingHooks = null;
+  el.hooksPreview.classList.add('hidden');
   renderProfileEditor();
   renderShortcuts();
   el.settingsMessage.textContent = '';
@@ -556,6 +816,7 @@ function openSettings() {
 function closeSettings() {
   el.settings.classList.add('hidden');
   refreshChrome();
+  noteActivity();
   const tab = tabs.get(activeId);
   if (tab && expanded) tab.term.focus();
 }
@@ -774,12 +1035,38 @@ async function saveAll() {
     return;
   }
 
+  // Avisos: los interruptores se leen de la vista y se guardan con el resto.
+  const alerts = {
+    ...draftAlerts,
+    events: { ...draftAlerts.events },
+    profiles: { ...draftAlerts.profiles },
+    sound: draftAlerts.sound !== false,
+    approve: draftAlerts.approve !== false,
+    seconds: Math.min(60, Math.max(3, Number(draftAlerts.seconds) || 8)),
+  };
+
+  const collapse = {
+    onBlur: draftCollapse.onBlur === true,
+    idle: draftCollapse.idle !== false,
+    idleSeconds: Math.min(300, Math.max(5, Number(draftCollapse.idleSeconds) || 10)),
+  };
+
   const clean = readProfiles();
+  const saved = await window.alero.saveSettings({
+    ...(clean.length ? { profiles: clean } : {}),
+    shortcuts,
+    alerts,
+    collapse,
+  });
   if (clean.length) {
-    const saved = await window.alero.saveSettings({ profiles: clean, shortcuts });
     profiles = saved.profiles || clean;
     await loadLogos();
   }
+  settings.alerts = saved.alerts || alerts;
+  settings.collapse = saved.collapse || collapse;
+  draftAlerts = copyAlerts(settings.alerts);
+  draftCollapse = copyCollapse(settings.collapse);
+  noteActivity();
 
   closeSettings();
 }
@@ -796,12 +1083,14 @@ function applyState(state) {
   expanded = Boolean(state.expanded);
   animating = Boolean(state.animating);
   el.shell.classList.toggle('collapsed', !expanded);
+  el.shell.classList.toggle('peek', Boolean(state.peek));
   refreshChrome();
   if (expanded && !animating) {
     requestAnimationFrame(() => {
       for (const tab of tabs.values()) fitTab(tab);
       const tab = tabs.get(activeId) || tabs.values().next().value;
       if (tab && !isSettingsOpen()) tab.term.focus();
+      noteActivity();
     });
   } else {
     closeMenu();
@@ -821,6 +1110,8 @@ function cycle(step) {
 // En fase de captura: las teclas que maneja la interfaz no llegan a la
 // terminal (si no, las flechas del menú se escribirían en el shell).
 document.addEventListener('keydown', (e) => {
+  noteActivity();
+
   // Grabando un atajo: las teclas son del grabador, no de la interfaz.
   if (recording) return;
 
@@ -943,6 +1234,8 @@ async function init() {
   window.alero.onExit((id) => markDead(id));
   window.alero.onState((state) => applyState(state));
   window.alero.onNewTab(() => openMenu());
+  window.alero.onAlert((data) => showAlert(data));
+  window.alero.onAlertClear(() => clearAlertUi());
 
   el.newTab.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -976,6 +1269,34 @@ async function init() {
   el.saveProfiles.addEventListener('click', saveAll);
   el.tabProfiles.addEventListener('click', () => setSettingsTab('profiles'));
   el.tabShortcuts.addEventListener('click', () => setSettingsTab('shortcuts'));
+  el.tabAlerts.addEventListener('click', () => setSettingsTab('alerts'));
+  el.tabBar.addEventListener('click', () => setSettingsTab('bar'));
+
+  el.hooksToggle.addEventListener('click', previewHooks);
+  el.hooksCancel.addEventListener('click', () => {
+    pendingHooks = null;
+    el.hooksPreview.classList.add('hidden');
+  });
+  el.hooksConfirm.addEventListener('click', applyHooks);
+
+  for (const input of el.alertsPane.querySelectorAll('input[data-event]')) {
+    input.addEventListener('change', () => {
+      if (!draftAlerts) return;
+      draftAlerts.events[input.dataset.event] = input.checked;
+    });
+  }
+
+  // Cualquier uso de la barra reinicia la cuenta de inactividad.
+  for (const type of ['mousemove', 'mousedown', 'wheel']) {
+    window.addEventListener(type, () => noteActivity(), { passive: true });
+  }
+
+  // Pasar a otra ventana del equipo (Alt+Tab) puede plegarla.
+  window.addEventListener('blur', () => {
+    if (!settings.collapse || !settings.collapse.onBlur) return;
+    if (!canAutoCollapse()) return;
+    window.alero.collapse();
+  });
 
   // Con la barra plegada, un clic en cualquier punto (salvo los botones) la abre.
   el.bar.addEventListener('click', (e) => {

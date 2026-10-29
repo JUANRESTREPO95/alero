@@ -42,6 +42,15 @@
       <div id="menu" class="menu hidden"></div>
     </header>
 
+    <section id="alert" class="alert hidden" role="status" aria-live="polite">
+      <span class="alert-avatar" id="alertAvatar" aria-hidden="true"></span>
+      <div class="alert-text">
+        <span class="alert-title" id="alertTitle"></span>
+        <span class="alert-body" id="alertBody"></span>
+      </div>
+      <div class="alert-actions" id="alertActions"></div>
+    </section>
+
     <main id="terminals">
       <div id="terminalsEmpty" class="pane-empty hidden">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6.5h14M3.5 6.5 8 11.5l4.5-5" /></svg>
@@ -72,6 +81,8 @@
         <nav class="settings-tabs" role="tablist" aria-label="Secciones de ajustes">
           <button id="tabProfiles" class="settings-tab active" role="tab">Perfiles</button>
           <button id="tabShortcuts" class="settings-tab" role="tab">Atajos</button>
+          <button id="tabAlerts" class="settings-tab" role="tab">Avisos</button>
+          <button id="tabBar" class="settings-tab" role="tab">Barra</button>
         </nav>
 
         <div id="profilesPane" class="pane">
@@ -85,6 +96,62 @@
 
         <div id="shortcutsPane" class="pane hidden">
           <div id="shortcutList" class="shortcut-list"></div>
+        </div>
+
+        <div id="alertsPane" class="pane hidden">
+          <div class="alerts-block">
+            <div class="alerts-row">
+              <div class="alerts-label">
+                <span class="title">Avisos en Claude Code</span>
+                <span class="meta" id="hooksStatus">Comprobando…</span>
+              </div>
+              <button id="hooksToggle">Instalar</button>
+            </div>
+            <div id="hooksPreview" class="hooks-preview hidden">
+              <pre id="hooksDiff"></pre>
+              <div class="hooks-actions">
+                <span class="meta" id="hooksNote"></span>
+                <button id="hooksCancel">Cancelar</button>
+                <button id="hooksConfirm" class="primary">Confirmar</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="alerts-block">
+            <span class="block-title">Cuándo avisar</span>
+            <label class="check"><input type="checkbox" data-event="stop"> Terminó el turno</label>
+            <label class="check"><input type="checkbox" data-event="permission"> Pide permiso</label>
+            <label class="check"><input type="checkbox" data-event="question"> Hace una pregunta</label>
+            <label class="check"><input type="checkbox" data-event="notification"> Espera que escribas</label>
+          </div>
+
+          <div class="alerts-block">
+            <span class="block-title">Perfiles que avisan</span>
+            <div id="alertProfiles" class="alert-profiles"></div>
+          </div>
+
+          <div class="alerts-block">
+            <label class="check"><input type="checkbox" id="alertSound"> Sonido al avisar</label>
+            <label class="check"><input type="checkbox" id="alertApprove"> Permitir o denegar desde el aviso</label>
+            <label class="check inline">Duración del aviso
+              <input type="number" id="alertSeconds" min="3" max="60" step="1"> s
+            </label>
+          </div>
+        </div>
+
+        <div id="barPane" class="pane hidden">
+          <div class="alerts-block">
+            <span class="block-title">Plegado automático</span>
+            <p class="hint">Puedes activar una, la otra o las dos. Con las dos apagadas, la barra se queda abierta hasta que la pliegues tú.</p>
+
+            <label class="check"><input type="checkbox" id="collapseBlur"> Plegar al pasar a otra ventana (Alt+Tab)</label>
+
+            <label class="check"><input type="checkbox" id="collapseIdle"> Plegar tras un rato sin usarla</label>
+            <label class="check inline">Tiempo sin actividad
+              <input type="number" id="collapseSeconds" min="5" max="300" step="1"> s
+            </label>
+            <p class="hint">Mientras escribes o haces clic dentro de Alero, la cuenta vuelve a cero. Nunca se pliega con un aviso o con Ajustes abiertos.</p>
+          </div>
         </div>
 
         <div class="settings-foot">

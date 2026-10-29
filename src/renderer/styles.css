@@ -707,3 +707,196 @@ html, body {
 .brand-mark.hidden,
 .brand-name.hidden,
 .brand-logo.hidden { display: none; }
+
+/* ── Avisos de Claude Code ─────────────────────────────────────────────────── */
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  align-self: center;
+  width: min(520px, calc(100% - 32px));
+  margin: 8px auto;
+  padding: 9px 10px 9px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+.alert-avatar {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--raised);
+}
+.alert-avatar img { width: 20px; height: 20px; object-fit: contain; border-radius: 4px; }
+.alert-avatar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tab-color, var(--muted)); }
+.alert.hidden { display: none; }
+
+.alert-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 auto; }
+.alert-title { color: var(--text); font-size: 13px; font-weight: 600; }
+.alert-body {
+  color: var(--muted);
+  font-size: var(--fs-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alert-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.alert-actions button {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--control);
+  background: transparent;
+  color: var(--faint);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.alert-actions button:hover { border-color: var(--muted); color: var(--text); }
+.alert-actions button.primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: #0d0d0f;
+  font-weight: 600;
+}
+
+/* Con un aviso en la barra plegada, la línea de arcilla parpadea. */
+@keyframes alero-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .25; }
+}
+/* Ojo: la clase es «alerting», no «alert»: .alert es la franja del aviso. */
+#shell.alerting::before { animation: alero-pulse 1.4s ease-in-out infinite; }
+#shell.peek #bar .brand { opacity: .9; }
+#shell.peek #terminals,
+#shell.peek #settings { display: none; }
+
+/* Ajustes → Avisos */
+.alerts-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.alerts-block:last-child { border-bottom: none; }
+.alerts-block .block-title { color: var(--muted); font-size: var(--fs-label); }
+
+.alerts-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.alerts-label { display: flex; flex-direction: column; gap: 2px; }
+.alerts-label .title { color: var(--text); font-size: 13px; }
+.alerts-label .meta, .hooks-actions .meta { color: var(--muted); font-size: var(--fs-small); }
+
+.alerts-block button,
+.hooks-actions button {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--control);
+  background: transparent;
+  color: var(--faint);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.alerts-block button:hover { border-color: var(--muted); color: var(--text); }
+.hooks-actions button.primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: #0d0d0f;
+  font-weight: 600;
+}
+
+.hooks-preview { display: flex; flex-direction: column; gap: 8px; }
+.hooks-preview.hidden { display: none; }
+.hooks-preview pre {
+  margin: 0;
+  max-height: 130px;
+  overflow: auto;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-radius: var(--radius-control);
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.45; /* taste-skill-ignore mono: es el JSON que se va a escribir */
+  font-family: "JetBrains Mono", Consolas, monospace; /* taste-skill-ignore mono: código */
+}
+.hooks-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.hooks-actions .meta { flex: 1 1 auto; color: var(--warning); }
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.check.inline { gap: 6px; }
+.check input[type="checkbox"] { accent-color: var(--accent); }
+.check input[type="number"] {
+  width: 56px;
+  height: 24px;
+  background: var(--rule);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  padding: 0 6px;
+}
+.alert-profiles { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+
+/* El aviso no existe plegada; asomada ocupa el alto disponible. */
+#shell.collapsed #alert { display: none; }
+
+/* La vista de Avisos es más alta que la ventana: se desplaza. */
+#alertsPane { overflow-y: auto; padding-right: 2px; }
+#alertsPane::-webkit-scrollbar { width: 8px; }
+#alertsPane::-webkit-scrollbar-track { background: transparent; }
+#alertsPane::-webkit-scrollbar-thumb { background: var(--control); border-radius: var(--radius-pill); }
+
+/* Asomada: solo la pestaña activa y la tarjeta del aviso, sin botones de barra. */
+#shell.peek .brand,
+#shell.peek .actions { display: none; }
+#shell.peek #bar { padding: 0; justify-content: center; }
+#shell.peek #tabs { justify-content: center; flex: 0 1 auto; }
+#shell.peek .tab:not(.active) { display: none; }
+#shell.peek .tab { padding: 0 12px; gap: 9px; }
+
+/* Asomada: la notificación sola, sin barra ni marco. */
+#shell.peek .alert {
+  width: 100%;
+  margin: 0;
+  border: none;
+  border-radius: 0 0 10px 10px;
+  padding: 14px 14px;
+  flex: 1 1 auto;
+}
+#shell.peek .alert-avatar { width: 26px; height: 26px; }
+#shell.peek .alert-avatar img { width: 24px; height: 24px; }
+
+/* Pestaña con el logo del perfil en vez del punto. */
+.tab .tab-logo {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  border-radius: 3px;
+  flex: 0 0 auto;
+  margin-right: 5px;
+}
+#shell.peek .tab-logo { width: 16px; height: 16px; }
+
+/* Con logo, el hueco del punto crece a lo que mide la imagen. */
+.tab .kind.has-logo {
+  width: auto;
+  height: auto;
+  background: transparent;
+}

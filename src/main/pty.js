@@ -37,7 +37,7 @@ function shellFor(shell) {
  * @param {(id:string, exit:{exitCode:number, signal?:number})=>void} onExit
  */
 function create(opts, onData, onExit) {
-  const { shell = 'powershell', command = '', cols = 80, rows = 24 } = opts || {};
+  const { shell = 'powershell', command = '', cols = 80, rows = 24, profile = '' } = opts || {};
   const id = crypto.randomUUID();
   const { file, args } = shellFor(shell);
 
@@ -52,12 +52,18 @@ function create(opts, onData, onExit) {
     }
   }
 
+  // El hook de Claude Code hereda el entorno de esta terminal: así cada aviso
+  // sabe de qué pestaña y de qué perfil viene.
+  const vars = env();
+  vars.ALERO_TAB = id;
+  if (profile) vars.ALERO_PROFILE = String(profile);
+
   const proc = pty.spawn(file, args, {
     name: 'xterm-256color',
     cols: Math.max(20, cols | 0),
     rows: Math.max(5, rows | 0),
     cwd,
-    env: env(),
+    env: vars,
     useConpty: true,
   });
 

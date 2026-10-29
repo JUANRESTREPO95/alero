@@ -97,6 +97,17 @@ que aporta color a la barra, porque identifica al perfil.
   `src/renderer/fonts/` (SIL OFL), así que no hay peticiones externas.
 - Radios: 8 paneles, 6 controles, píldora en los botones.
 
+## Plegado automático
+
+En **Ajustes → Barra**, dos reglas independientes que se pueden combinar:
+
+- **Plegar al pasar a otra ventana** (Alt+Tab a otra app).
+- **Plegar tras un rato sin usarla**: segundos configurables (10 por defecto).
+  La cuenta se reinicia al escribir o hacer clic dentro de Alero.
+
+Con las dos apagadas, la barra se queda abierta hasta que la pliegues tú. Nunca
+se pliega con un aviso pendiente, con Ajustes abiertos o grabando un atajo.
+
 ## Ajustes
 
 Se guardan en `%APPDATA%\Alero\settings.json`: tamaño, estado, perfiles y
