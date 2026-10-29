@@ -49,7 +49,7 @@ configures.
 
 Descarga el instalador desde la página de
 [**releases**](https://github.com/JUANRESTREPO95/alero/releases/latest):
-[Alero-Setup-0.2.0.exe](https://github.com/JUANRESTREPO95/alero/releases/download/v0.2.0/Alero-Setup-0.2.0.exe).
+[Alero-Setup-0.2.1.exe](https://github.com/JUANRESTREPO95/alero/releases/download/v0.2.1/Alero-Setup-0.2.1.exe).
 Se instala por usuario, sin permisos de administrador, con accesos en el
 escritorio y en el menú de inicio.
 
@@ -60,10 +60,10 @@ Para comprobar que la descarga está íntegra, junto al instalador hay un
 `.sha256`. En Windows:
 
 ```powershell
-Get-FileHash .Alero-Setup-0.2.0.exe -Algorithm SHA256
+Get-FileHash .\Alero-Setup-0.2.1.exe -Algorithm SHA256
 ```
 
-Debe coincidir con el contenido de `Alero-Setup-0.2.0.exe.sha256`.
+Debe coincidir con el contenido de `Alero-Setup-0.2.1.exe.sha256`.
 
 ### Desde el código
 
@@ -204,7 +204,7 @@ assets/        iconos
 
 ## Estado
 
-Versión **0.2.0** (octubre 2026). Funcionando a diario: pestañas reales,
+Versión **0.2.1** (octubre 2026). Funcionando a diario: pestañas reales,
 perfiles con logo, atajos configurables, avisos con Allow/Deny, plegado
 automático e instalador.
 

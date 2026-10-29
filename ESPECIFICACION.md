@@ -5,7 +5,7 @@
 > o pregunta algo, y deja responder desde la propia barra.
 
 Proyecto personal de Juan. Carpeta: `C:\Users\juanp\Documents\CLAUDE\Alero`.
-Versión: **0.2.0**.
+Versión: **0.2.1**.
 
 ---
 
