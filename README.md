@@ -98,3 +98,5 @@ Ver [`ESPECIFICACION.md`](ESPECIFICACION.md) para el alcance detallado.
 ## Licencia
 
 MIT. Ver [`LICENSE`](LICENSE).
+
+Incluye xterm.js y @xterm/addon-fit (MIT), Electron (MIT) y node-pty (MIT).
